@@ -1,0 +1,114 @@
+@AuthServer_HostAddress = http://localhost:5000
+
+# ===========================================
+# OAuth2/OpenID Connect Token Endpoints
+# ===========================================
+
+### Get Access Token using Password Flow (Web Client)
+POST {{AuthServer_HostAddress}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password
+&client_id=web-client
+&client_secret=secret
+&username=admin@example.com
+&password=Admin123!
+&scope=openid profile email data.read data.write profile.read profile.write
+
+### Get Access Token using Client Credentials Flow (ServiceA)
+POST {{AuthServer_HostAddress}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+&client_id=ServiceA
+&client_secret=servicea-secret
+&scope=internal.servicea.read internal.servicea.create internal.servicea.update internal.servicea.delete
+
+### Refresh Token
+POST {{AuthServer_HostAddress}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&client_id=web-client
+&client_secret=secret
+&refresh_token=YOUR_REFRESH_TOKEN_HERE
+
+# ===========================================
+# Account Management Endpoints
+# ===========================================
+
+### Register New User
+POST {{AuthServer_HostAddress}}/account/register
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "NewUser123!",
+  "confirmPassword": "NewUser123!",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+
+### Login User (Alternative to OAuth flow)
+POST {{AuthServer_HostAddress}}/account/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "Admin123!"
+}
+
+### Get User Profile (Requires Authentication)
+GET {{AuthServer_HostAddress}}/account/profile
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Logout User
+POST {{AuthServer_HostAddress}}/account/logout
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Forgot Password
+POST {{AuthServer_HostAddress}}/account/forgot-password
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Reset Password
+POST {{AuthServer_HostAddress}}/account/reset-password
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "token": "RESET_TOKEN_FROM_EMAIL",
+  "newPassword": "NewPassword123!",
+  "confirmPassword": "NewPassword123!"
+}
+
+# ===========================================
+# Scope and Client Management Endpoints
+# ===========================================
+
+### Get All Clients
+GET {{AuthServer_HostAddress}}/scope/clients
+
+### Get Specific Client
+GET {{AuthServer_HostAddress}}/scope/clients/web-client
+
+### Get All Scopes Configuration
+GET {{AuthServer_HostAddress}}/scope/scopes
+
+### Validate Client Credentials
+GET {{AuthServer_HostAddress}}/scope/validate-client?clientId=web-client&clientSecret=secret
+
+### Validate Scope for Client
+GET {{AuthServer_HostAddress}}/scope/validate-scope?clientId=web-client&scope=data.read
+
+# ===========================================
+# Variables for Testing
+# ===========================================
+# Replace these variables with actual values from token responses:
+# @access_token = YOUR_ACCESS_TOKEN_HERE
+# @refresh_token = YOUR_REFRESH_TOKEN_HERE
+
+###

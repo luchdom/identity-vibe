@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=AuthServer
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - identity-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # AuthServer
+  authserver:
+    build:
+      context: .
+      dockerfile: src/backend/AuthServer/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5000:80"
+      - "5001:443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+  # Gateway BFF
+  gateway:
+    build:
+      context: .
+      dockerfile: src/backend/Gateway/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+    ports:
+      - "5002:80"
+      - "5004:443"
+    depends_on:
+      - authserver
+      - servicea
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+  # ServiceA
+  servicea:
+    build:
+      context: .
+      dockerfile: src/backend/ServiceA/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:80;https://+:443
+    ports:
+      - "5003:80"
+      - "5005:443"
+    depends_on:
+      - authserver
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+  # React Client
+  client:
+    build:
+      context: ./src/client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  identity-network:
+    driver: bridge 

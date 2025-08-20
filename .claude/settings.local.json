@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm:*)",
+      "Bash(mv:*)",
+      "Bash(dotnet build)",
+      "Bash(mkdir:*)",
+      "Bash(dotnet new:*)",
+      "Bash(touch:*)",
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(robocopy:*)",
+      "Bash(cp:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(powershell:*)",
+      "Bash(pnpm:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(npx tailwindcss init:*)",
+      "Bash(xcopy:*)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\c\\dev\\luchdom\\identity"
+    ]
+  }
+}

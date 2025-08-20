@@ -1,0 +1,119 @@
+@Gateway_HostAddress = http://localhost:5002
+
+# ===========================================
+# Gateway BFF Authentication Endpoints
+# ===========================================
+
+### Login via Gateway BFF
+POST {{Gateway_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "Admin123!"
+}
+
+### Refresh Token via Gateway BFF
+POST {{Gateway_HostAddress}}/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
+}
+
+### Get Current User Info (Requires Authentication)
+GET {{Gateway_HostAddress}}/auth/user
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+### Logout via Gateway BFF
+POST {{Gateway_HostAddress}}/auth/logout
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+# ===========================================
+# Gateway YARP Proxied Endpoints
+# ===========================================
+
+### Health Check
+GET {{Gateway_HostAddress}}/health
+
+# AuthServer endpoints proxied through direct paths
+### Get Clients via Gateway (proxied to AuthServer)
+GET {{Gateway_HostAddress}}/scope/clients
+
+### Register User via Gateway (proxied to AuthServer)
+POST {{Gateway_HostAddress}}/account/register
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "NewUser123!",
+  "confirmPassword": "NewUser123!",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+
+### Get User Profile via Gateway (proxied to AuthServer)
+GET {{Gateway_HostAddress}}/account/profile
+Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
+
+# ServiceA endpoints proxied through /data/* path
+### Get Data via Gateway (proxied to ServiceA - requires internal.servicea.read scope)
+GET {{Gateway_HostAddress}}/data
+Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+
+### Get User Data via Gateway (proxied to ServiceA - requires data.read scope)
+GET {{Gateway_HostAddress}}/data/user
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+
+### Create Data via Gateway (proxied to ServiceA - requires internal.servicea.create scope)
+POST {{Gateway_HostAddress}}/data
+Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+Content-Type: application/json
+
+"New data item created via Gateway"
+
+### Update Data via Gateway (proxied to ServiceA - requires internal.servicea.update scope)
+PUT {{Gateway_HostAddress}}/data/1
+Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+Content-Type: application/json
+
+"Updated data item via Gateway"
+
+### Delete Data via Gateway (proxied to ServiceA - requires internal.servicea.delete scope)
+DELETE {{Gateway_HostAddress}}/data/1
+Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+
+### Get Service Info via Gateway (proxied to ServiceA - no auth required)
+GET {{Gateway_HostAddress}}/data/info
+
+# ===========================================
+# Complete BFF Workflow Example
+# ===========================================
+
+### Step 1: Login to get tokens
+# POST {{Gateway_HostAddress}}/auth/login
+# Content-Type: application/json
+# 
+# {
+#   "email": "admin@example.com",
+#   "password": "Admin123!"
+# }
+
+### Step 2: Use the access_token from login response in subsequent requests
+# GET {{Gateway_HostAddress}}/auth/user
+# Authorization: Bearer {access_token_from_step_1}
+
+### Step 3: Access protected resources through Gateway
+# GET {{Gateway_HostAddress}}/data/user
+# Authorization: Bearer {access_token_from_step_1}
+
+# ===========================================
+# Variables for Testing
+# ===========================================
+# Replace these with actual tokens:
+# @access_token = YOUR_ACCESS_TOKEN_HERE
+# @refresh_token = YOUR_REFRESH_TOKEN_HERE
+# @service_token = YOUR_SERVICE_ACCESS_TOKEN_HERE
+# @user_token = YOUR_USER_ACCESS_TOKEN_HERE
+
+###

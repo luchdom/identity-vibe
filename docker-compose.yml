@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=AuthServer
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - identity-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # AuthServer
+  authserver:
+    build:
+      context: .
+      dockerfile: src/backend/AuthServer/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=postgres
+    ports:
+      - "5000:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - identity-network
+    volumes:
+      - ~/.aspnet/https:/https:ro
+    restart: unless-stopped
+
+  # Gateway BFF
+  gateway:
+    build:
+      context: .
+      dockerfile: src/backend/Gateway/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "5002:8080"
+    depends_on:
+      - authserver
+      - servicea
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+  # ServiceA
+  servicea:
+    build:
+      context: .
+      dockerfile: src/backend/ServiceA/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:8080
+    ports:
+      - "5003:8080"
+    depends_on:
+      - authserver
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+  # React Client
+  client:
+    build:
+      context: ./src/client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway
+    networks:
+      - identity-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  identity-network:
+    driver: bridge 

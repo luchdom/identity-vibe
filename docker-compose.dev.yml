@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # AuthServer with development settings
+  authserver:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    volumes:
+      - ./src/backend/AuthServer:/app
+      - /app/bin
+      - /app/obj
+    command: dotnet watch run --urls http://+:80
+
+  # ServiceA with development settings
+  servicea:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+    volumes:
+      - ./src/backend/ServiceA:/app
+      - /app/bin
+      - /app/obj
+    command: dotnet watch run --urls http://+:80
+
+  # React Client with development settings and hot reload
+  client:
+    build:
+      context: ./src/client
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src/client:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API_BASE_URL=http://localhost:5002
+    command: npm start 

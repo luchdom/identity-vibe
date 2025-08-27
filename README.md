@@ -1,10 +1,11 @@
-# .NET 8 Authentication and Authorization System with OpenIddict and YARP
+# .NET 8 Authentication and Authorization System with Modern React Frontend
 
-This project implements a complete authentication and authorization system using .NET 8, OpenIddict, JWT tokens, and YARP reverse proxy. It consists of three main components:
+This project implements a complete full-stack authentication and authorization system using .NET 8, OpenIddict, JWT tokens, YARP reverse proxy, and a modern React frontend. It consists of four main components:
 
 1. **AuthServer** - OpenIddict-based authentication server with ASP.NET Core Identity
 2. **Gateway** - YARP-based Backend for Frontend (BFF) service with authentication handling  
 3. **ServiceA** - Resource API that validates tokens and enforces authorization policies
+4. **React Frontend** - Modern React 18 application with TypeScript, shadcn/ui, and comprehensive authentication flow
 
 ## Project Structure
 
@@ -61,6 +62,32 @@ identity/
 │   │   └── AuthorizationService.cs
 │   ├── appsettings.json
 │   └── Program.cs
+├── src/client/                 # React Frontend Application
+│   ├── public/                 # Static assets
+│   ├── src/
+│   │   ├── components/         # Reusable React components
+│   │   │   ├── ui/             # shadcn/ui components
+│   │   │   ├── ModeToggle.tsx  # Theme toggle component
+│   │   │   └── ProtectedRoute.tsx
+│   │   ├── contexts/           # React contexts
+│   │   │   ├── AuthContext.tsx # Authentication state management
+│   │   │   └── ThemeContext.tsx# Theme state management
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── lib/                # Utility functions
+│   │   │   └── api.ts          # Axios HTTP client
+│   │   ├── pages/              # Page components
+│   │   │   ├── LoginPage.tsx   # Login with form validation
+│   │   │   ├── RegisterPage.tsx # User registration
+│   │   │   ├── DashboardPage.tsx # Protected dashboard
+│   │   │   └── ErrorPage.tsx   # 404 and error pages
+│   │   ├── App.tsx             # Main app component with routing
+│   │   └── main.tsx            # React app entry point
+│   ├── tests/                  # Playwright E2E tests
+│   ├── components.json         # shadcn/ui configuration
+│   ├── tailwind.config.js      # Tailwind CSS configuration
+│   ├── playwright.config.ts    # Playwright test configuration
+│   ├── package.json            # Frontend dependencies
+│   └── vite.config.ts          # Vite build configuration
 ├── .editorconfig
 ├── .gitignore
 ├── CLAUDE.md
@@ -103,6 +130,20 @@ identity/
 - **Multi-issuer** support for token validation
 - **CORS** configuration
 - **Token Information** endpoint for debugging
+
+### React Frontend
+- **React 18** with modern functional components and hooks
+- **TypeScript** for full type safety throughout the application
+- **Vite** for fast development and optimized production builds
+- **shadcn/ui** component library built on Radix UI primitives
+- **Tailwind CSS** for utility-first responsive styling
+- **React Router** for client-side routing with protected routes
+- **React Hook Form** with Zod validation for type-safe forms
+- **Authentication Flow** with automatic token refresh and persistence
+- **Dark/Light Theme** support with system preference detection
+- **Responsive Design** optimized for desktop and mobile devices
+- **Playwright** for comprehensive end-to-end testing
+- **Context7 Integration** for AI-powered documentation access
 
 ## Configuration
 
@@ -175,6 +216,7 @@ ServiceA uses dynamic authorization policies defined in `appsettings.json`:
 ### Prerequisites
 - .NET 8 SDK
 - PostgreSQL (or use Docker)
+- Node.js 18+ with pnpm (for frontend)
 - Visual Studio 2022 or VS Code
 
 ### Option 1: Docker (Recommended)
@@ -196,28 +238,70 @@ For detailed Docker instructions, see [DOCKER.md](DOCKER.md).
 
 ### Option 2: Local Development
 
-### Running the Applications
+### Running the Backend Services
 
 1. **Start the AuthServer**:
    ```bash
-   cd AuthServer
+   cd src/backend/AuthServer
    dotnet run
    ```
    The AuthServer will run on `http://localhost:5000`
 
 2. **Start the Gateway**:
    ```bash
-   cd Gateway
+   cd src/backend/Gateway
    dotnet run
    ```
    The Gateway will run on `http://localhost:5002`
 
 3. **Start ServiceA**:
    ```bash
-   cd ServiceA
+   cd src/backend/ServiceA
    dotnet run
    ```
    ServiceA will run on `http://localhost:5001`
+
+### Running the Frontend Application
+
+4. **Start the React Frontend**:
+   ```bash
+   cd src/client
+   pnpm install
+   pnpm dev
+   ```
+   The React application will run on `http://localhost:5173`
+
+### Frontend Development Commands
+
+```bash
+# Install dependencies
+cd src/client
+pnpm install
+
+# Start development server with hot reloading
+pnpm dev
+
+# Build for production
+pnpm build
+
+# Preview production build
+pnpm preview
+
+# Run tests
+pnpm test
+
+# Add shadcn/ui components
+npx shadcn@latest add [component-name]
+
+# Run Playwright E2E tests
+npx playwright test
+
+# Run Playwright tests in UI mode
+npx playwright test --ui
+
+# Run Playwright tests with debugging
+npx playwright test --debug
+```
 
 ### Database Setup
 The AuthServer will automatically create the database and seed the OpenIddict entities and a default admin user on first run.
@@ -227,6 +311,32 @@ The AuthServer will automatically create the database and seed the OpenIddict en
 - Password: `Admin123!`
 
 ## Testing the System
+
+### Frontend Testing
+
+The React application provides a complete user interface for authentication:
+
+1. **Login Page**: Navigate to `http://localhost:5173/login`
+   - Pre-filled with admin credentials: `admin@example.com` / `Admin123!`
+   - Supports theme switching (Light/Dark/System)
+   - Form validation with TypeScript and Zod
+
+2. **Registration Page**: Navigate to `http://localhost:5173/register`
+   - Complete user registration form with validation
+   - Automatic redirect to dashboard after successful registration
+
+3. **Dashboard**: Protected route at `http://localhost:5173/dashboard`
+   - Displays user information and system statistics
+   - Theme toggle and logout functionality in header
+   - Responsive design for mobile and desktop
+
+4. **E2E Testing with Playwright**:
+   ```bash
+   cd src/client
+   npx playwright test
+   ```
+
+### API Testing
 
 ### 1. User Registration
 

@@ -30,9 +30,10 @@ builder.Services.AddCors(options =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "https://localhost:5000";
-        options.Audience = "https://localhost:5000";
+        options.Authority = "http://localhost:5000";
+        options.Audience = "http://localhost:5000";
         options.RequireHttpsMetadata = false; // For development only
+        options.IncludeErrorDetails = true; // For development debugging
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,

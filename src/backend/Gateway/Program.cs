@@ -4,17 +4,29 @@ using Microsoft.IdentityModel.Tokens;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add CORS
+// builder.Services.AddCors(options =>
+// {
+//     options.AddPolicy("DefaultPolicy", policy =>
+//     {
+//         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
+//         policy.WithOrigins(allowedOrigins)
+//               .AllowAnyMethod()
+//               .AllowAnyHeader()
+//               .AllowCredentials();
+//     });
+// });
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DefaultPolicy", policy =>
+    options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        policy.SetIsOriginAllowed(origin => new Uri(origin).IsLoopback)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
+
 
 // Add Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -22,11 +34,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var authority = builder.Configuration["Authentication:Authority"];
         var audience = builder.Configuration["Authentication:Audience"];
-        
+
         options.Authority = authority;
         options.Audience = audience;
         options.RequireHttpsMetadata = false; // For development only
-        
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -67,7 +79,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseCors("DefaultPolicy");
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

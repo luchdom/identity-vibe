@@ -30,7 +30,15 @@ builder.Services.AddCors(options =>
 // Add Entity Framework Core
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (builder.Environment.EnvironmentName == "Docker")
+    {
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        options.UseSqlite(connectionString);
+    }
     // Register OpenIddict entities
     options.UseOpenIddict();
 });

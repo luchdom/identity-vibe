@@ -1,35 +1,103 @@
-import { useState } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from '@/components/ui/sonner';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ThemeProvider } from '@/context/theme-provider';
+import { SearchProvider } from '@/contexts/SearchProvider';
+import { LayoutProvider } from '@/context/layout-provider';
+import { NavigationProgress } from '@/components/navigation-progress';
+import { NotFoundError } from '@/features/errors/not-found-error';
 
-function App() {
-  const [count, setCount] = useState(0)
+// Features
+import { SignIn } from '@/features/auth/sign-in';
+import { Dashboard } from '@/features/dashboard';
+
+// Layout
+import { AuthenticatedLayout } from '@/components/layout/authenticated-layout';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/sign-in" replace />;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
-          Tailwind CSS Test
-        </h1>
-        <div className="space-y-4">
-          <button 
-            onClick={() => setCount((count) => count + 1)}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
-          >
-            Count is {count}
-          </button>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-green-800 text-sm">
-              ✅ Tailwind CSS is working! Try clicking the button above.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="h-12 bg-red-300 rounded"></div>
-            <div className="h-12 bg-green-300 rounded"></div>
-            <div className="h-12 bg-blue-300 rounded"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+    <SearchProvider>
+      <LayoutProvider>
+        <AuthenticatedLayout>{children}</AuthenticatedLayout>
+      </LayoutProvider>
+    </SearchProvider>
+  );
 }
 
-export default App
+function AppRoutes() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route 
+        path="/sign-in" 
+        element={isAuthenticated ? <Navigate to="/" replace /> : <SignIn />} 
+      />
+      
+      {/* Protected routes */}
+      <Route 
+        path="/" 
+        element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Redirect old routes */}
+      <Route 
+        path="/login" 
+        element={<Navigate to="/sign-in" replace />} 
+      />
+      <Route 
+        path="/dashboard" 
+        element={<Navigate to="/" replace />} 
+      />
+
+      {/* 404 route */}
+      <Route 
+        path="*" 
+        element={<NotFoundError />}
+      />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider defaultTheme="system" storageKey="ui-theme">
+      <Router>
+        <AuthProvider>
+          <NavigationProgress />
+          <AppRoutes />
+          <Toaster duration={5000} />
+        </AuthProvider>
+      </Router>
+    </ThemeProvider>
+  );
+}
+
+export default App;

@@ -95,15 +95,26 @@ public class AuthorizationController(
 
             // Add the claims associated with the user to the identity
             identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
-            identity.AddClaim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
+            
+            // Add profile claims and set destinations
+            var nameClaim = new Claim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
+            nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(nameClaim);
 
             if (!string.IsNullOrEmpty(user.Email))
             {
-                identity.AddClaim(OpenIddictConstants.Claims.Email, user.Email);
+                var emailClaim = new Claim(OpenIddictConstants.Claims.Email, user.Email);
+                emailClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+                identity.AddClaim(emailClaim);
             }
 
-            identity.AddClaim(OpenIddictConstants.Claims.GivenName, user.FirstName);
-            identity.AddClaim(OpenIddictConstants.Claims.FamilyName, user.LastName);
+            var givenNameClaim = new Claim(OpenIddictConstants.Claims.GivenName, user.FirstName);
+            givenNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(givenNameClaim);
+            
+            var familyNameClaim = new Claim(OpenIddictConstants.Claims.FamilyName, user.LastName);
+            familyNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(familyNameClaim);
 
             // Get user scopes based on configuration
             var userScopes = scopeConfigService.GetUserScopes(user);

@@ -5,9 +5,9 @@ EXPOSE 443
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["AuthServer/AuthServer.csproj", "AuthServer/"]
+COPY ["src/backend/AuthServer/AuthServer.csproj", "AuthServer/"]
 RUN dotnet restore "AuthServer/AuthServer.csproj"
-COPY . .
+COPY src/backend/ .
 WORKDIR "/src/AuthServer"
 RUN dotnet build "AuthServer.csproj" -c Release -o /app/build
 

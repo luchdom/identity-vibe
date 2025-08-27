@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using AuthServer.Data;
@@ -226,12 +227,24 @@ public class AccountController(
     }
 
     [HttpGet("profile")]
-    public async Task<ActionResult<object>> GetProfile()
+    public async Task<ActionResult<object>> GetProfile([FromQuery] string? userId = null)
     {
-        var user = await _userManager.GetUserAsync(User);
+        AppUser? user = null;
+        
+        if (!string.IsNullOrEmpty(userId))
+        {
+            // Get user by ID from query parameter (for BFF requests)
+            user = await _userManager.FindByIdAsync(userId);
+        }
+        else
+        {
+            // Try to get user from claims (for direct authenticated requests)
+            user = await _userManager.GetUserAsync(User);
+        }
+        
         if (user == null)
         {
-            return Unauthorized();
+            return NotFound(new { error = "User not found" });
         }
 
         return Ok(new
@@ -240,6 +253,7 @@ public class AccountController(
             user.Email,
             user.FirstName,
             user.LastName,
+            user.PhoneNumber,
             user.CreatedAt,
             user.IsActive
         });

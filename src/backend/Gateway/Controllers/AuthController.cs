@@ -22,7 +22,7 @@ public class AuthController(IHttpClientFactory httpClientFactory, IConfiguration
             client_secret = "gateway-secret",
             username = request.Email,
             password = request.Password,
-            scope = "openid profile email data.read data.write profile.read profile.write"
+            scope = "openid profile email offline_access data.read data.write profile.read profile.write"
         };
 
         var formContent = new FormUrlEncodedContent(new[]
@@ -104,6 +104,37 @@ public class AuthController(IHttpClientFactory httpClientFactory, IConfiguration
     public IActionResult Logout()
     {
         return Ok(new { message = "Logged out successfully" });
+    }
+
+    [HttpGet("profile")]
+    [HttpGet("/account/profile")]
+    [Authorize]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return BadRequest(new { error = "User ID not found in token" });
+        }
+
+        var authServerUrl = configuration["Authentication:Authority"];
+        
+        try
+        {
+            var response = await _httpClient.GetAsync($"{authServerUrl}/account/profile?userId={userId}");
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                return Ok(content);
+            }
+            
+            return StatusCode((int)response.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = "Profile service unavailable", details = ex.Message });
+        }
     }
 }
 

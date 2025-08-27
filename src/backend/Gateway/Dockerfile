@@ -4,9 +4,9 @@ EXPOSE 8080
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["Gateway/Gateway.csproj", "Gateway/"]
+COPY ["src/backend/Gateway/Gateway.csproj", "Gateway/"]
 RUN dotnet restore "Gateway/Gateway.csproj"
-COPY . .
+COPY src/backend/ .
 WORKDIR "/src/Gateway"
 RUN dotnet build "Gateway.csproj" -c Release -o /app/build
 

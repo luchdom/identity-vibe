@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using AuthServer.Data;
+using OpenIddict.Abstractions;
+using Microsoft.Extensions.Options;
+using AuthServer.Configuration;
 
 namespace AuthServer.Services;
 
@@ -7,7 +10,10 @@ public class DatabaseSeeder(
     AppDbContext context,
     UserManager<AppUser> userManager,
     RoleManager<AppRole> roleManager,
-    ILogger<DatabaseSeeder> logger)
+    ILogger<DatabaseSeeder> logger,
+    IOpenIddictApplicationManager applicationManager,
+    IOpenIddictScopeManager scopeManager,
+    IOptions<ScopeConfiguration> scopeConfig)
 {
     public async Task SeedAsync()
     {
@@ -21,6 +27,9 @@ public class DatabaseSeeder(
 
             // Seed default admin user
             await SeedDefaultUserAsync();
+
+            // Seed OpenIddict clients and scopes
+            await SeedOpenIddictAsync();
 
             logger.LogInformation("Database seeding completed successfully");
         }
@@ -78,9 +87,11 @@ public class DatabaseSeeder(
             {
                 UserName = AdminEmail,
                 Email = AdminEmail,
-                FirstName = "Admin",
-                LastName = "User",
+                FirstName = "John",
+                LastName = "Administrator",
+                PhoneNumber = "+1234567890",
                 EmailConfirmed = true,
+                PhoneNumberConfirmed = true,
                 IsActive = true
             };
 
@@ -99,7 +110,103 @@ public class DatabaseSeeder(
         }
         else
         {
-            logger.LogInformation("Admin user already exists: {Email}", AdminEmail);
+            // Update existing admin user with additional fields if they're missing
+            bool updated = false;
+            if (string.IsNullOrEmpty(adminUser.FirstName))
+            {
+                adminUser.FirstName = "John";
+                updated = true;
+            }
+            if (string.IsNullOrEmpty(adminUser.LastName))
+            {
+                adminUser.LastName = "Administrator";
+                updated = true;
+            }
+            if (string.IsNullOrEmpty(adminUser.PhoneNumber))
+            {
+                adminUser.PhoneNumber = "+1234567890";
+                adminUser.PhoneNumberConfirmed = true;
+                updated = true;
+            }
+
+            if (updated)
+            {
+                await userManager.UpdateAsync(adminUser);
+                logger.LogInformation("Updated admin user with additional fields: {Email}", AdminEmail);
+            }
+            else
+            {
+                logger.LogInformation("Admin user already exists: {Email}", AdminEmail);
+            }
         }
+    }
+
+    private async Task SeedOpenIddictAsync()
+    {
+        logger.LogInformation("Starting OpenIddict seeding...");
+        
+        // Create required scopes manually
+        var requiredScopes = new[]
+        {
+            "openid", "profile", "email", "offline_access", 
+            "data.read", "data.write", "profile.read", "profile.write"
+        };
+
+        foreach (var scopeName in requiredScopes)
+        {
+            if (await scopeManager.FindByNameAsync(scopeName) == null)
+            {
+                var descriptor = new OpenIddictScopeDescriptor
+                {
+                    Name = scopeName,
+                    DisplayName = scopeName switch
+                    {
+                        "openid" => "OpenID Connect",
+                        "profile" => "Profile", 
+                        "email" => "Email",
+                        "offline_access" => "Offline Access",
+                        "data.read" => "Read Data",
+                        "data.write" => "Write Data",
+                        "profile.read" => "Read Profile", 
+                        "profile.write" => "Write Profile",
+                        _ => scopeName
+                    }
+                };
+
+                await scopeManager.CreateAsync(descriptor);
+                logger.LogInformation("Created scope: {ScopeName}", scopeName);
+            }
+        }
+
+        // Create gateway-bff client manually
+        if (await applicationManager.FindByClientIdAsync("gateway-bff") == null)
+        {
+            var descriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = "gateway-bff",
+                ClientSecret = "gateway-secret",
+                DisplayName = "Gateway BFF",
+                ConsentType = OpenIddictConstants.ConsentTypes.Implicit
+            };
+
+            // Add grant types
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.Password);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.RefreshToken);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.ClientCredentials);
+
+            // Add endpoint permissions
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
+            
+            // Add scope permissions
+            foreach (var scope in requiredScopes)
+            {
+                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
+            }
+
+            await applicationManager.CreateAsync(descriptor);
+            logger.LogInformation("Created client: gateway-bff");
+        }
+
+        logger.LogInformation("OpenIddict seeding completed");
     }
 }

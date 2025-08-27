@@ -1,13 +1,204 @@
-# .NET 8 Authentication and Authorization System with Modern React Frontend
+# Identity System
 
-This project implements a complete full-stack authentication and authorization system using .NET 8, OpenIddict, JWT tokens, YARP reverse proxy, and a modern React frontend. It consists of four main components:
+A modern .NET 8 OAuth2/OpenID Connect authentication system with React frontend, implementing secure authentication, authorization, and resource access patterns.
 
-1. **AuthServer** - OpenIddict-based authentication server with ASP.NET Core Identity
-2. **Gateway** - YARP-based Backend for Frontend (BFF) service with authentication handling  
-3. **ServiceA** - Resource API that validates tokens and enforces authorization policies
-4. **React Frontend** - Modern React 18 application with TypeScript, shadcn/ui, and comprehensive authentication flow
+## 🚀 Quick Start
 
-## Project Structure
+### Prerequisites
+- .NET 8 SDK
+- Node.js 18+ and pnpm
+- Docker and Docker Compose
+
+### Development Setup (Recommended)
+```bash
+# 1. Clone and setup
+git clone <repository-url>
+cd identity
+
+# 2. Start backend services in Docker
+docker-compose up --build postgres authserver gateway servicea
+
+# 3. Start frontend locally (separate terminal)
+cd src/client
+pnpm install
+pnpm dev
+```
+
+### Access the Application
+- **Frontend**: http://localhost:5173
+- **API Gateway**: http://localhost:5002
+- **Login**: `admin@example.com` / `Admin123!`
+
+## 🏗️ Architecture
+
+### Services
+- **AuthServer** (5000): OAuth2/OIDC authentication server
+- **Gateway** (5002): BFF (Backend for Frontend) proxy
+- **ServiceA** (5003): Protected resource API
+- **Frontend** (5173): React TypeScript application
+
+### Key Features
+- ✅ OpenIddict OAuth2/OIDC implementation
+- ✅ JWT token-based authentication
+- ✅ BFF pattern for secure frontend communication
+- ✅ Modern React with TypeScript and Tailwind CSS
+- ✅ shadcn/ui component library
+- ✅ Playwright E2E testing
+- ✅ Docker development environment
+
+## 📁 Project Structure
+
+```
+src/
+├── backend/
+│   ├── AuthServer/          # OAuth2 authentication server
+│   ├── Gateway/             # BFF proxy service
+│   └── ServiceA/            # Resource API
+└── client/                  # React frontend application
+
+docs/                        # Detailed documentation
+├── ARCHITECTURE.md          # Backend patterns & service communication
+├── FRONTEND.md             # React patterns & component guidelines
+├── DEPLOYMENT.md           # Docker & environment configuration
+└── DEVELOPMENT.md          # Setup & troubleshooting guide
+
+CLAUDE.md                    # AI assistant guidance (condensed)
+```
+
+## 🛠️ Development
+
+### Backend (.NET 8)
+```bash
+# Run locally (requires PostgreSQL)
+cd src/backend/AuthServer && dotnet run
+cd src/backend/Gateway && dotnet run
+cd src/backend/ServiceA && dotnet run
+```
+
+### Frontend (React + TypeScript)
+```bash
+cd src/client
+
+# Development
+pnpm dev
+
+# Testing  
+pnpm test                    # Unit tests
+npx playwright test         # E2E tests
+npx playwright test --ui    # E2E with debugging UI
+
+# Build
+pnpm build
+```
+
+### Docker Development
+```bash
+# Full Docker environment
+docker-compose up --build
+
+# Backend only (recommended for development)
+docker-compose up --build postgres authserver gateway servicea
+```
+
+## 🧪 Testing
+
+### End-to-End Testing (Playwright)
+```bash
+cd src/client
+npx playwright test --ui     # Interactive testing
+npx playwright test          # Headless testing
+```
+
+### Unit Testing
+```bash
+# Backend
+dotnet test IdentitySolution.sln
+
+# Frontend  
+cd src/client && pnpm test
+```
+
+## 🚢 Deployment
+
+### Production Docker
+```bash
+docker-compose -f docker-compose.prod.yml up --build -d
+```
+
+### Environment Configuration
+- Development: `appsettings.Development.json`
+- Docker: `appsettings.Docker.json`
+- Production: `appsettings.Production.json`
+
+## 📚 Documentation
+
+### For Developers
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - Setup, troubleshooting, debugging
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Backend patterns, BFF rules, service communication
+- **[docs/FRONTEND.md](docs/FRONTEND.md)** - React patterns, components, testing
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Docker, environments, monitoring
+
+### For AI Assistants  
+- **[CLAUDE.md](CLAUDE.md)** - Essential context for AI code assistance
+
+## 🔧 Common Tasks
+
+### Database Operations
+```bash
+# Reset database
+docker-compose down -v && docker-compose up --build postgres authserver
+
+# Connect to database
+docker-compose exec postgres psql -U postgres -d AuthServer
+
+# Run migrations
+cd src/backend/AuthServer && dotnet ef database update
+```
+
+### Add UI Components
+```bash
+cd src/client
+npx shadcn@latest add button card input form
+```
+
+### View Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f gateway
+```
+
+## 🔐 Security Features
+
+- OAuth2 / OpenID Connect implementation
+- JWT token validation across services
+- BFF pattern preventing direct API access
+- CORS configuration for secure cross-origin requests
+- ASP.NET Core Identity for user management
+- Scope-based authorization policies
+
+## 🏃‍♂️ Performance
+
+- React 18 with concurrent features
+- Vite for fast development builds
+- Docker multi-stage builds for production
+- Database connection pooling
+- JWT token caching and refresh
+
+## 🤝 Contributing
+
+1. Read the development guide: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+2. Follow the coding standards in [CLAUDE.md](CLAUDE.md)
+3. Write tests for new features
+4. Test with the recommended Docker setup
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+## Legacy Project Structure
 
 ```
 identity/

@@ -487,6 +487,11 @@ $RECYCLE.BIN/
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# Playwright MCP screenshots and test artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+
 # Local development certificates
 *.pfx
 *.p12
@@ -569,3 +574,14 @@ jspm_packages/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# Temporary and backup files
+*.old
+*.bak
+*.backup
+*.orig
+*.tmp
+nul
+
+# Claude AI local settings
+.claude/settings.local.json

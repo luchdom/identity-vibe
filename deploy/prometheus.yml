@@ -1,0 +1,52 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+rule_files:
+  - "/root/config/alert_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'signoz-otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+
+  - job_name: 'signoz-query-service'
+    static_configs:
+      - targets: ['query-service:8080']
+    scrape_interval: 60s
+    metrics_path: /api/v1/metrics
+
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:8123']
+    scrape_interval: 60s
+    metrics_path: /metrics
+
+  - job_name: 'identity-authserver'
+    static_configs:
+      - targets: ['authserver:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+  - job_name: 'identity-gateway'
+    static_configs:
+      - targets: ['gateway:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    
+  - job_name: 'identity-servicea'
+    static_configs:
+      - targets: ['servicea:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics

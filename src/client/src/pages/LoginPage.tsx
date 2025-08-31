@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModeToggle } from '@/components/ModeToggle';
 
 const loginSchema = z.object({
@@ -17,6 +18,35 @@ const loginSchema = z.object({
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
+
+// Test user types and configuration
+interface TestUser {
+  id: string;
+  label: string;
+  email: string;
+  password: string;
+  description: string;
+}
+
+const TEST_USERS: TestUser[] = [
+  {
+    id: 'admin',
+    label: 'Admin User',
+    email: 'admin@example.com',
+    password: 'Admin123!',
+    description: 'Full admin access with all permissions'
+  },
+  {
+    id: 'user',
+    label: 'Regular User',
+    email: 'user@example.com',
+    password: 'User123!',
+    description: 'Standard user access with limited permissions'
+  }
+];
+
+// Show dropdown only in development environment
+const SHOW_TEST_DROPDOWN = import.meta.env.DEV;
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -29,6 +59,16 @@ const LoginPage = () => {
       password: 'Admin123!',
     },
   });
+
+  // Handle test user selection
+  const handleTestUserSelect = (userId: string) => {
+    const selectedUser = TEST_USERS.find(user => user.id === userId);
+    if (selectedUser) {
+      form.setValue('email', selectedUser.email);
+      form.setValue('password', selectedUser.password);
+      toast.success(`Credentials filled for ${selectedUser.label}`);
+    }
+  };
 
   const onSubmit = async (data: LoginFormData) => {
     try {
@@ -54,6 +94,29 @@ const LoginPage = () => {
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
+          {SHOW_TEST_DROPDOWN && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Quick Test Login</label>
+              <Select onValueChange={handleTestUserSelect}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select test user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEST_USERS.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{user.label}</span>
+                        <span className="text-xs text-muted-foreground">{user.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Select a test user to auto-fill login credentials
+              </p>
+            </div>
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField

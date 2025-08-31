@@ -4,11 +4,38 @@ using AuthServer.Data;
 using Microsoft.AspNetCore.Identity;
 using AuthServer.Configuration;
 using AuthServer.Services;
+using AuthServer.Services.Interfaces;
+using AuthServer.Repositories;
+using AuthServer.Repositories.Interfaces;
+using Shared.Logging.Extensions;
+using Shared.OpenTelemetry.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure automatic OpenTelemetry instrumentation
+builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0");
+
 // Add services to the container.
 builder.Services.AddControllers();
+
+// Configure Problem Details
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = (context) =>
+    {
+        context.ProblemDetails.Instance = context.HttpContext.Request.Path;
+        
+        // Add traceId if available
+        if (context.HttpContext.Request.Headers.ContainsKey("X-Correlation-ID"))
+        {
+            context.ProblemDetails.Extensions["traceId"] = context.HttpContext.Request.Headers["X-Correlation-ID"].ToString();
+        }
+        else if (!string.IsNullOrEmpty(context.HttpContext.TraceIdentifier))
+        {
+            context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        }
+    };
+});
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -66,6 +93,20 @@ builder.Services.Configure<ScopeConfiguration>(
 builder.Services.AddScoped<ScopeConfigurationService>();
 builder.Services.AddScoped<DatabaseSeeder>();
 
+// Clean Architecture Services
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+
+// Clean Architecture Repositories
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+
+// Add logging services
+builder.Services.AddLoggingServices();
+
+// Add automatic OpenTelemetry filters for business context
+builder.Services.AddOpenTelemetryFilters();
+
 // Add OpenIddict
 builder.Services.AddOpenIddict()
     .AddCore(options =>
@@ -109,18 +150,25 @@ builder.Services.AddOpenIddict()
             OpenIddictConstants.Scopes.Email,
             OpenIddictConstants.Scopes.Profile,
             OpenIddictConstants.Scopes.Roles,
-            // Domain-based user scopes
+            // Legacy data scopes (for backward compatibility)
             "data.read",
             "data.write", 
             "data.delete",
+            // New Orders-specific scopes
+            "orders.read",
+            "orders.write",
+            "orders.manage",
+            // Profile scopes
             "profile.read",
             "profile.write",
+            // Admin scopes
             "admin.manage",
+            "admin.users",
+            "admin.roles",
             // Internal service scopes
-            "internal.servicea.read",
-            "internal.servicea.create",
-            "internal.servicea.update",
-            "internal.servicea.delete",
+            "internal.orders.read",
+            "internal.orders.write",
+            "internal.orders.manage",
             "gateway-bff"
         );
     })
@@ -141,7 +189,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Problem Details middleware is enabled automatically with AddProblemDetails()
+
 app.UseCors("DefaultPolicy");
+
+// Add OpenTelemetry middleware
+app.UseOpenTelemetryMiddleware();
+
+// Add logging middleware
+app.UseLoggingMiddleware();
+app.UseSerilogMiddleware();
 
 app.UseAuthentication();
 app.UseAuthorization();

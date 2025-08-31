@@ -25,8 +25,8 @@ public class DatabaseSeeder(
             // Seed roles
             await SeedRolesAsync();
 
-            // Seed default admin user
-            await SeedDefaultUserAsync();
+            // Seed default users (admin and regular)
+            await SeedDefaultUsersAsync();
 
             // Seed OpenIddict clients and scopes
             await SeedOpenIddictAsync();
@@ -74,69 +74,93 @@ public class DatabaseSeeder(
         }
     }
 
-    private async Task SeedDefaultUserAsync()
+    private async Task SeedDefaultUsersAsync()
     {
-        const string AdminEmail = "admin@example.com";
-        const string AdminPassword = "Admin123!";
-        const string AdminRole = "Admin";
+        // Seed Admin User
+        await SeedUserAsync(
+            email: "admin@example.com",
+            password: "Admin123!",
+            firstName: "John",
+            lastName: "Administrator",
+            role: "Admin",
+            phoneNumber: "+1234567890");
 
-        var adminUser = await userManager.FindByEmailAsync(AdminEmail);
-        if (adminUser == null)
+        // Seed Regular User
+        await SeedUserAsync(
+            email: "user@example.com",
+            password: "User123!",
+            firstName: "Jane",
+            lastName: "User",
+            role: "User",
+            phoneNumber: "+1234567891");
+    }
+
+    private async Task SeedUserAsync(string email, string password, string firstName, string lastName, string role, string phoneNumber)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user == null)
         {
-            adminUser = new AppUser
+            user = new AppUser
             {
-                UserName = AdminEmail,
-                Email = AdminEmail,
-                FirstName = "John",
-                LastName = "Administrator",
-                PhoneNumber = "+1234567890",
+                UserName = email,
+                Email = email,
+                FirstName = firstName,
+                LastName = lastName,
+                PhoneNumber = phoneNumber,
                 EmailConfirmed = true,
                 PhoneNumberConfirmed = true,
                 IsActive = true
             };
 
-            var result = await userManager.CreateAsync(adminUser, AdminPassword);
+            var result = await userManager.CreateAsync(user, password);
             if (result.Succeeded)
             {
-                // Add admin role
-                await userManager.AddToRoleAsync(adminUser, AdminRole);
-                logger.LogInformation("Default admin user created: {Email} / {Password}", AdminEmail, AdminPassword);
+                // Add role
+                await userManager.AddToRoleAsync(user, role);
+                logger.LogInformation("Default {Role} user created: {Email} / {Password}", role.ToLower(), email, password);
             }
             else
             {
-                logger.LogError("Failed to create admin user: {Errors}",
-                    string.Join(", ", result.Errors.Select(e => e.Description)));
+                logger.LogError("Failed to create {Role} user: {Errors}",
+                    role.ToLower(), string.Join(", ", result.Errors.Select(e => e.Description)));
             }
         }
         else
         {
-            // Update existing admin user with additional fields if they're missing
+            // Update existing user with additional fields if they're missing
             bool updated = false;
-            if (string.IsNullOrEmpty(adminUser.FirstName))
+            if (string.IsNullOrEmpty(user.FirstName))
             {
-                adminUser.FirstName = "John";
+                user.FirstName = firstName;
                 updated = true;
             }
-            if (string.IsNullOrEmpty(adminUser.LastName))
+            if (string.IsNullOrEmpty(user.LastName))
             {
-                adminUser.LastName = "Administrator";
+                user.LastName = lastName;
                 updated = true;
             }
-            if (string.IsNullOrEmpty(adminUser.PhoneNumber))
+            if (string.IsNullOrEmpty(user.PhoneNumber))
             {
-                adminUser.PhoneNumber = "+1234567890";
-                adminUser.PhoneNumberConfirmed = true;
+                user.PhoneNumber = phoneNumber;
+                user.PhoneNumberConfirmed = true;
                 updated = true;
             }
 
             if (updated)
             {
-                await userManager.UpdateAsync(adminUser);
-                logger.LogInformation("Updated admin user with additional fields: {Email}", AdminEmail);
+                await userManager.UpdateAsync(user);
+                logger.LogInformation("Updated {Role} user with additional fields: {Email}", role.ToLower(), email);
             }
             else
             {
-                logger.LogInformation("Admin user already exists: {Email}", AdminEmail);
+                logger.LogInformation("{Role} user already exists: {Email}", role, email);
+            }
+
+            // Ensure user has the correct role
+            if (!await userManager.IsInRoleAsync(user, role))
+            {
+                await userManager.AddToRoleAsync(user, role);
+                logger.LogInformation("Added {Role} role to user: {Email}", role, email);
             }
         }
     }
@@ -149,7 +173,14 @@ public class DatabaseSeeder(
         var requiredScopes = new[]
         {
             "openid", "profile", "email", "offline_access", 
-            "data.read", "data.write", "profile.read", "profile.write"
+            // Legacy data scopes (for backward compatibility)
+            "data.read", "data.write", "data.delete",
+            // New Orders-specific scopes
+            "orders.read", "orders.write", "orders.manage",
+            // Profile scopes
+            "profile.read", "profile.write", 
+            // Admin scopes
+            "admin.manage", "admin.users", "admin.roles"
         };
 
         foreach (var scopeName in requiredScopes)
@@ -165,10 +196,21 @@ public class DatabaseSeeder(
                         "profile" => "Profile", 
                         "email" => "Email",
                         "offline_access" => "Offline Access",
+                        // Legacy data scopes
                         "data.read" => "Read Data",
                         "data.write" => "Write Data",
+                        "data.delete" => "Delete Data",
+                        // Orders scopes
+                        "orders.read" => "Read Orders",
+                        "orders.write" => "Create/Update Orders",
+                        "orders.manage" => "Manage Orders (Admin)",
+                        // Profile scopes
                         "profile.read" => "Read Profile", 
                         "profile.write" => "Write Profile",
+                        // Admin scopes
+                        "admin.manage" => "Admin Management",
+                        "admin.users" => "Admin User Management",
+                        "admin.roles" => "Admin Role Management",
                         _ => scopeName
                     }
                 };

@@ -1,0 +1,91 @@
+{
+  "dashboard": {
+    "id": "authentication-performance",
+    "title": "Authentication Performance",
+    "description": "Authentication and authorization metrics for the Identity System",
+    "version": "1.0.0",
+    "tags": ["identity", "authentication", "authorization", "security"],
+    "panels": [
+      {
+        "id": "login-success-rate",
+        "title": "Login Success Rate",
+        "type": "stat",
+        "queries": [
+          {
+            "query": "rate(http_server_requests_total{service_name=\"authserver\", method=\"POST\", route=\"/account/login\", status_code=\"200\"}[5m]) / rate(http_server_requests_total{service_name=\"authserver\", method=\"POST\", route=\"/account/login\"}[5m]) * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "description": "Percentage of successful login attempts"
+      },
+      {
+        "id": "registration-rate",
+        "title": "User Registration Rate",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "rate(http_server_requests_total{service_name=\"authserver\", method=\"POST\", route=\"/account/register\", status_code=\"200\"}[5m])",
+            "legendFormat": "Registrations/sec"
+          }
+        ],
+        "description": "Rate of successful user registrations"
+      },
+      {
+        "id": "auth-response-time",
+        "title": "Authentication Response Time",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_name=\"authserver\", route=~\"/account/.*\"}[5m])) by (route, le))",
+            "legendFormat": "{{route}} - 95th"
+          },
+          {
+            "query": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{service_name=\"authserver\", route=~\"/account/.*\"}[5m])) by (route, le))",
+            "legendFormat": "{{route}} - 50th"
+          }
+        ],
+        "description": "Authentication endpoint response times"
+      },
+      {
+        "id": "failed-logins",
+        "title": "Failed Login Attempts",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "rate(http_server_requests_total{service_name=\"authserver\", method=\"POST\", route=\"/account/login\", status_code=~\"4..|5..\"}[5m])",
+            "legendFormat": "Failed Logins/sec"
+          }
+        ],
+        "description": "Rate of failed login attempts (potential security issue)"
+      },
+      {
+        "id": "token-generation",
+        "title": "Token Generation Rate",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "rate(http_server_requests_total{service_name=\"authserver\", route=\"/connect/token\", status_code=\"200\"}[5m])",
+            "legendFormat": "Tokens/sec"
+          }
+        ],
+        "description": "OAuth2 token generation rate"
+      },
+      {
+        "id": "authorization-failures",
+        "title": "Authorization Failures",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "rate(http_server_requests_total{service_name=~\"gateway|servicea\", status_code=\"401\"}[5m])",
+            "legendFormat": "{{service_name}} - Unauthorized"
+          },
+          {
+            "query": "rate(http_server_requests_total{service_name=~\"gateway|servicea\", status_code=\"403\"}[5m])",
+            "legendFormat": "{{service_name}} - Forbidden"
+          }
+        ],
+        "description": "Rate of authorization failures across services"
+      }
+    ]
+  }
+}

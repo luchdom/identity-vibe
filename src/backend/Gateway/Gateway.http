@@ -56,35 +56,63 @@ Content-Type: application/json
 GET {{Gateway_HostAddress}}/account/profile
 Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
 
-# ServiceA endpoints proxied through /data/* path
-### Get Data via Gateway (proxied to ServiceA - requires internal.servicea.read scope)
-GET {{Gateway_HostAddress}}/data
-Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
-
-### Get User Data via Gateway (proxied to ServiceA - requires data.read scope)
-GET {{Gateway_HostAddress}}/data/user
+# Orders Service endpoints proxied through /orders/* path
+### Get Orders via Gateway (proxied to Orders Service - requires orders.read scope)
+GET {{Gateway_HostAddress}}/orders
 Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
 
-### Create Data via Gateway (proxied to ServiceA - requires internal.servicea.create scope)
-POST {{Gateway_HostAddress}}/data
-Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+### Create Order via Gateway (proxied to Orders Service - requires orders.write scope)
+POST {{Gateway_HostAddress}}/orders
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
 Content-Type: application/json
+Idempotency-Key: order-{{$randomUuid}}
 
-"New data item created via Gateway"
+{
+  "customerFirstName": "John",
+  "customerLastName": "Doe",
+  "customerEmail": "john.doe@example.com",
+  "customerPhone": "+1-555-0123",
+  "shippingAddress": "123 Main St",
+  "shippingCity": "New York",
+  "shippingState": "NY",
+  "shippingPostalCode": "10001",
+  "shippingCountry": "USA",
+  "specialInstructions": "Leave at door",
+  "orderItems": [
+    {
+      "productSku": "LAPTOP-001",
+      "productName": "Gaming Laptop Pro",
+      "productDescription": "High-performance gaming laptop",
+      "productCategory": "Electronics",
+      "quantity": 1,
+      "unitPrice": 1299.99
+    }
+  ]
+}
 
-### Update Data via Gateway (proxied to ServiceA - requires internal.servicea.update scope)
-PUT {{Gateway_HostAddress}}/data/1
-Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+### Get Order by ID via Gateway (proxied to Orders Service - requires orders.read scope)
+GET {{Gateway_HostAddress}}/orders/1
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+
+### Update Order via Gateway (proxied to Orders Service - requires orders.write scope)
+PUT {{Gateway_HostAddress}}/orders/1
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
 Content-Type: application/json
+Idempotency-Key: update-{{$randomUuid}}
 
-"Updated data item via Gateway"
+{
+  "specialInstructions": "Updated instructions - Call before delivery"
+}
 
-### Delete Data via Gateway (proxied to ServiceA - requires internal.servicea.delete scope)
-DELETE {{Gateway_HostAddress}}/data/1
-Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
+### Cancel Order via Gateway (proxied to Orders Service - requires orders.write scope)
+POST {{Gateway_HostAddress}}/orders/1/cancel
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+Content-Type: application/json
+Idempotency-Key: cancel-{{$randomUuid}}
 
-### Get Service Info via Gateway (proxied to ServiceA - no auth required)
-GET {{Gateway_HostAddress}}/data/info
+{
+  "reason": "Customer requested cancellation"
+}
 
 # ===========================================
 # Complete BFF Workflow Example
@@ -104,7 +132,7 @@ GET {{Gateway_HostAddress}}/data/info
 # Authorization: Bearer {access_token_from_step_1}
 
 ### Step 3: Access protected resources through Gateway
-# GET {{Gateway_HostAddress}}/data/user
+# GET {{Gateway_HostAddress}}/orders
 # Authorization: Bearer {access_token_from_step_1}
 
 # ===========================================

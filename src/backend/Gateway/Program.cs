@@ -1,7 +1,16 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Gateway.Services;
+using Gateway.Services.Interfaces;
+using Gateway.Connectors;
+using Gateway.Connectors.Interfaces;
+using Shared.Logging.Extensions;
+using Shared.OpenTelemetry.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure automatic OpenTelemetry instrumentation
+builder.AddOpenTelemetryAutoInstrumentation("gateway", "1.0.0");
 
 // Add CORS
 // builder.Services.AddCors(options =>
@@ -64,9 +73,40 @@ builder.Services.AddReverseProxy()
 
 // Add services to the container
 builder.Services.AddControllers();
+
+// Configure Problem Details
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = (context) =>
+    {
+        context.ProblemDetails.Instance = context.HttpContext.Request.Path;
+        
+        // Add traceId if available
+        if (context.HttpContext.Request.Headers.ContainsKey("X-Correlation-ID"))
+        {
+            context.ProblemDetails.Extensions["traceId"] = context.HttpContext.Request.Headers["X-Correlation-ID"].ToString();
+        }
+        else if (!string.IsNullOrEmpty(context.HttpContext.TraceIdentifier))
+        {
+            context.ProblemDetails.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+        }
+    };
+});
 builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Clean Architecture Services
+builder.Services.AddScoped<IAuthProxyService, AuthProxyService>();
+
+// Clean Architecture Connectors
+builder.Services.AddScoped<IAuthServerConnector, AuthServerConnector>();
+
+// Add logging services
+builder.Services.AddLoggingServices();
+
+// Add automatic OpenTelemetry filters for business context
+builder.Services.AddOpenTelemetryFilters();
 
 var app = builder.Build();
 
@@ -79,7 +119,16 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Problem Details middleware is enabled automatically with AddProblemDetails()
+
 app.UseCors();
+
+// Add OpenTelemetry middleware
+app.UseOpenTelemetryMiddleware();
+
+// Add logging middleware
+app.UseLoggingMiddleware();
+app.UseSerilogMiddleware();
 
 app.UseAuthentication();
 app.UseAuthorization();

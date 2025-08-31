@@ -68,7 +68,16 @@
       "Read(/C:\\dev\\others\\shadcn-admin\\src\\features/**)",
       "Read(/C:\\dev\\others\\shadcn-admin\\src\\features\\auth\\sign-in/**)",
       "mcp__playwright__browser_install",
-      "Bash(timeout 5 pnpm dev:*)"
+      "Bash(timeout 5 pnpm dev:*)",
+      "Bash(npx tsc:*)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\AuthServer/**)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\AuthServer/**)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\AuthServer/**)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\AuthServer/**)",
+      "Read(C:\\c/**)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\AuthServer/**)",
+      "Bash(dotnet add reference:*)",
+      "Read(C:\\c\\dev\\luchdom\\identity\\src\\backend\\Gateway/**)"
     ],
     "deny": [],
     "ask": [],

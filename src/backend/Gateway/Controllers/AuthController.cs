@@ -1,142 +1,65 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
+using Gateway.Models.Requests;
+using Gateway.Services.Interfaces;
+using Shared.Logging.Services;
+using Shared.Common;
+using Shared.Extensions;
 
 namespace Gateway.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class AuthController(IHttpClientFactory httpClientFactory, IConfiguration configuration) : ControllerBase
+public class AuthController(
+    IAuthProxyService authProxyService,
+    ICorrelationIdService correlationIdService,
+    ILogger<AuthController> logger) : ControllerBase
 {
-    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
-
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var authServerUrl = configuration["Authentication:Authority"];
+        logger.LogInformation("Gateway: Proxying login request for {Email}", request.Email);
+        var result = await authProxyService.LoginAsync(request);
         
-        var tokenRequest = new
+        if (result.Success)
         {
-            grant_type = "password",
-            client_id = "gateway-bff",
-            client_secret = "gateway-secret",
-            username = request.Email,
-            password = request.Password,
-            scope = "openid profile email offline_access data.read data.write profile.read profile.write"
-        };
-
-        var formContent = new FormUrlEncodedContent(new[]
-        {
-            new KeyValuePair<string, string>("grant_type", tokenRequest.grant_type),
-            new KeyValuePair<string, string>("client_id", tokenRequest.client_id),
-            new KeyValuePair<string, string>("client_secret", tokenRequest.client_secret),
-            new KeyValuePair<string, string>("username", tokenRequest.username),
-            new KeyValuePair<string, string>("password", tokenRequest.password),
-            new KeyValuePair<string, string>("scope", tokenRequest.scope)
-        });
-
-        try
-        {
-            var response = await _httpClient.PostAsync($"{authServerUrl}/connect/token", formContent);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
-            {
-                return Ok(content);
-            }
-            
-            return BadRequest(content);
+            logger.LogInformation("Gateway: Login successful for {Email}", request.Email);
+            return Ok(result);
         }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { error = "Authentication service unavailable", details = ex.Message });
-        }
-    }
-
-    [HttpPost("refresh")]
-    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
-    {
-        var authServerUrl = configuration["Authentication:Authority"];
         
-        var formContent = new FormUrlEncodedContent(new[]
-        {
-            new KeyValuePair<string, string>("grant_type", "refresh_token"),
-            new KeyValuePair<string, string>("client_id", "gateway-bff"),
-            new KeyValuePair<string, string>("client_secret", "gateway-secret"),
-            new KeyValuePair<string, string>("refresh_token", request.RefreshToken)
-        });
-
-        try
-        {
-            var response = await _httpClient.PostAsync($"{authServerUrl}/connect/token", formContent);
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
-            {
-                return Ok(content);
-            }
-            
-            return BadRequest(content);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { error = "Authentication service unavailable", details = ex.Message });
-        }
-    }
-
-    [HttpGet("user")]
-    [Authorize]
-    public IActionResult GetUser()
-    {
-        var user = new
-        {
-            Id = User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-            Email = User.FindFirst(ClaimTypes.Email)?.Value,
-            Name = User.FindFirst(ClaimTypes.Name)?.Value,
-            Roles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray()
-        };
-
-        return Ok(user);
+        logger.LogWarning("Gateway: Login failed for {Email}", request.Email);
+        return ConvertToProblemsDetails(result, "AUTH_INVALID_CREDENTIALS");
     }
 
     [HttpPost("logout")]
     [Authorize]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout()
     {
-        return Ok(new { message = "Logged out successfully" });
+        logger.LogInformation("Gateway: Proxying logout request");
+        var result = await authProxyService.LogoutAsync();
+        
+        return result.Success ? Ok(result) : ConvertToProblemsDetails(result, "LOGOUT_FAILED");
     }
 
     [HttpGet("profile")]
-    [HttpGet("/account/profile")]
     [Authorize]
     public async Task<IActionResult> GetProfile()
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-        if (string.IsNullOrEmpty(userId))
-        {
-            return BadRequest(new { error = "User ID not found in token" });
-        }
-
-        var authServerUrl = configuration["Authentication:Authority"];
+        logger.LogInformation("Gateway: Proxying profile request");
+        var result = await authProxyService.GetProfileAsync();
         
-        try
-        {
-            var response = await _httpClient.GetAsync($"{authServerUrl}/account/profile?userId={userId}");
-            var content = await response.Content.ReadAsStringAsync();
-            
-            if (response.IsSuccessStatusCode)
-            {
-                return Ok(content);
-            }
-            
-            return StatusCode((int)response.StatusCode, content);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { error = "Profile service unavailable", details = ex.Message });
-        }
+        return result.Success ? Ok(result) : ConvertToProblemsDetails(result, "PROFILE_FETCH_FAILED");
+    }
+
+    /// <summary>
+    /// Converts AuthResponse failure to Problem Details format
+    /// </summary>
+    /// <param name="response">The failed AuthResponse</param>
+    /// <param name="errorCode">The error code to use</param>
+    /// <returns>IActionResult with Problem Details</returns>
+    private IActionResult ConvertToProblemsDetails(Gateway.Models.Responses.AuthResponse response, string errorCode)
+    {
+        var result = Result<object>.Failure(errorCode, response.Message);
+        return result.ToActionResultWithProblemDetails(HttpContext);
     }
 }
-
-public record LoginRequest(string Email, string Password);
-public record RefreshTokenRequest(string RefreshToken);

@@ -54,16 +54,16 @@ services:
       - "5004:443"
     depends_on:
       - authserver
-      - servicea
+      - orders
     networks:
       - identity-network
     restart: unless-stopped
 
-  # ServiceA
-  servicea:
+  # Orders Service
+  orders:
     build:
       context: .
-      dockerfile: src/backend/ServiceA/Dockerfile
+      dockerfile: src/backend/Orders/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:80;https://+:443

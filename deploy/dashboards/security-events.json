@@ -1,0 +1,111 @@
+{
+  "dashboard": {
+    "id": "security-events",
+    "title": "Security Events Dashboard",
+    "description": "Security monitoring and anomaly detection for the Identity System",
+    "version": "1.0.0",
+    "tags": ["security", "monitoring", "anomalies", "alerts"],
+    "panels": [
+      {
+        "id": "failed-login-attempts",
+        "title": "Failed Login Attempts (Last 24h)",
+        "type": "stat",
+        "queries": [
+          {
+            "query": "sum(increase(http_server_requests_total{service_name=\"authserver\", route=\"/account/login\", status_code=~\"4..\"}[24h]))",
+            "legendFormat": "Failed Attempts"
+          }
+        ],
+        "description": "Total failed login attempts in the last 24 hours"
+      },
+      {
+        "id": "brute-force-detection",
+        "title": "Potential Brute Force Attacks",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=\"authserver\", route=\"/account/login\", status_code=\"401\"}[1m])) > 10",
+            "legendFormat": "High Failure Rate"
+          }
+        ],
+        "description": "Login failure rate indicating potential brute force attacks (>10/min)"
+      },
+      {
+        "id": "unauthorized-access-attempts",
+        "title": "Unauthorized Access Attempts",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=~\"gateway|servicea\", status_code=\"401\"}[5m])) by (service_name)",
+            "legendFormat": "{{service_name}} - 401 Unauthorized"
+          },
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=~\"gateway|servicea\", status_code=\"403\"}[5m])) by (service_name)",
+            "legendFormat": "{{service_name}} - 403 Forbidden"
+          }
+        ],
+        "description": "Rate of unauthorized access attempts to protected resources"
+      },
+      {
+        "id": "suspicious-user-agents",
+        "title": "Suspicious User Agents",
+        "type": "table",
+        "queries": [
+          {
+            "query": "topk(20, sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\", status_code=~\"4..|5..\"}[5m])) by (user_agent))",
+            "legendFormat": "{{user_agent}}"
+          }
+        ],
+        "description": "User agents with highest error rates (potential bots/scanners)"
+      },
+      {
+        "id": "high-traffic-ips",
+        "title": "High Traffic Source IPs",
+        "type": "table",
+        "queries": [
+          {
+            "query": "topk(20, sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\"}[5m])) by (client_ip))",
+            "legendFormat": "{{client_ip}}"
+          }
+        ],
+        "description": "Source IP addresses with highest request rates"
+      },
+      {
+        "id": "account-lockouts",
+        "title": "Account Lockouts",
+        "type": "stat",
+        "queries": [
+          {
+            "query": "sum(increase(security_events_total{event_type=\"account_lockout\"}[1h]))",
+            "legendFormat": "Lockouts (1h)"
+          }
+        ],
+        "description": "Number of account lockouts in the last hour"
+      },
+      {
+        "id": "token-validation-failures",
+        "title": "Token Validation Failures",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=\"gateway\", status_code=\"401\"}[5m]))",
+            "legendFormat": "Invalid Tokens"
+          }
+        ],
+        "description": "Rate of token validation failures at the gateway"
+      },
+      {
+        "id": "registration-anomalies",
+        "title": "Registration Anomalies",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=\"authserver\", route=\"/account/register\"}[5m]))",
+            "legendFormat": "Registration Rate"
+          }
+        ],
+        "description": "User registration rate (watch for unusual spikes)"
+      }
+    ]
+  }
+}

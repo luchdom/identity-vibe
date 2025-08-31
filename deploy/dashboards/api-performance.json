@@ -1,0 +1,83 @@
+{
+  "dashboard": {
+    "id": "api-performance",
+    "title": "API Performance Dashboard",
+    "description": "API endpoints performance and usage metrics",
+    "version": "1.0.0",
+    "tags": ["api", "performance", "endpoints"],
+    "panels": [
+      {
+        "id": "endpoint-throughput",
+        "title": "API Endpoint Throughput",
+        "type": "graph",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\"}[5m])) by (service_name, route)",
+            "legendFormat": "{{service_name}} - {{route}}"
+          }
+        ],
+        "description": "Request throughput per API endpoint"
+      },
+      {
+        "id": "endpoint-latency",
+        "title": "API Endpoint Latency Distribution",
+        "type": "heatmap",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_request_duration_seconds_bucket{service_name=~\"authserver|gateway|servicea\"}[5m])) by (service_name, route, le)",
+            "legendFormat": "{{service_name}} - {{route}}"
+          }
+        ],
+        "description": "Latency distribution heatmap for API endpoints"
+      },
+      {
+        "id": "status-code-distribution",
+        "title": "HTTP Status Code Distribution",
+        "type": "pie",
+        "queries": [
+          {
+            "query": "sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\"}[5m])) by (status_code)",
+            "legendFormat": "{{status_code}}"
+          }
+        ],
+        "description": "Distribution of HTTP status codes across all services"
+      },
+      {
+        "id": "top-endpoints",
+        "title": "Top 10 Most Used Endpoints",
+        "type": "table",
+        "queries": [
+          {
+            "query": "topk(10, sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\"}[5m])) by (service_name, route, method))",
+            "legendFormat": "{{service_name}} {{method}} {{route}}"
+          }
+        ],
+        "description": "Most frequently called API endpoints"
+      },
+      {
+        "id": "slowest-endpoints",
+        "title": "Slowest API Endpoints",
+        "type": "table",
+        "queries": [
+          {
+            "query": "topk(10, histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{service_name=~\"authserver|gateway|servicea\"}[5m])) by (service_name, route, method, le)))",
+            "legendFormat": "{{service_name}} {{method}} {{route}}"
+          }
+        ],
+        "description": "API endpoints with highest 95th percentile latency"
+      },
+      {
+        "id": "error-prone-endpoints",
+        "title": "Error-Prone Endpoints",
+        "type": "table",
+        "queries": [
+          {
+            "query": "topk(10, sum(rate(http_server_requests_total{service_name=~\"authserver|gateway|servicea\", status_code=~\"4..|5..\"}[5m])) by (service_name, route, method))",
+            "legendFormat": "{{service_name}} {{method}} {{route}}"
+          }
+        ],
+        "description": "API endpoints with highest error rates"
+      }
+    ]
+  }
+}

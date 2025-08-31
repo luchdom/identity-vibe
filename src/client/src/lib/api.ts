@@ -3,6 +3,26 @@ import { showErrorToast } from './errorHandler';
 
 const BASE_URL = 'http://localhost:5002';
 
+// Correlation ID utilities
+const generateCorrelationId = (): string => {
+  return crypto.randomUUID();
+};
+
+const getOrCreateCorrelationId = (): string => {
+  let correlationId = sessionStorage.getItem('correlationId');
+  if (!correlationId) {
+    correlationId = generateCorrelationId();
+    sessionStorage.setItem('correlationId', correlationId);
+  }
+  return correlationId;
+};
+
+export const correlationId = {
+  generate: generateCorrelationId,
+  getCurrent: getOrCreateCorrelationId,
+  clear: () => sessionStorage.removeItem('correlationId')
+};
+
 export const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
@@ -12,13 +32,24 @@ export const api = axios.create({
   timeout: 10000, // 10 seconds timeout
 });
 
-// Request interceptor to add access token
+// Request interceptor to add access token and correlation ID
 api.interceptors.request.use(
   (config) => {
+    // Add authorization token
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add correlation ID
+    const currentCorrelationId = getOrCreateCorrelationId();
+    config.headers['X-Correlation-ID'] = currentCorrelationId;
+    
+    // Log API requests in development
+    if (import.meta.env.DEV) {
+      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url} | CorrelationId: ${currentCorrelationId}`);
+    }
+    
     return config;
   },
   (error) => {
@@ -28,7 +59,14 @@ api.interceptors.request.use(
 
 // Response interceptor to handle token refresh and errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log successful responses in development
+    if (import.meta.env.DEV) {
+      const correlationId = response.headers['x-correlation-id'] || response.config.headers['X-Correlation-ID'];
+      console.log(`[API Response] ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url} | CorrelationId: ${correlationId}`);
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
@@ -64,6 +102,12 @@ api.interceptors.response.use(
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
+    }
+
+    // Log error responses in development
+    if (import.meta.env.DEV) {
+      const correlationId = error.response?.headers['x-correlation-id'] || originalRequest.headers['X-Correlation-ID'];
+      console.error(`[API Error] ${error.response?.status} ${originalRequest.method?.toUpperCase()} ${originalRequest.url} | CorrelationId: ${correlationId}`, error);
     }
 
     // Handle other errors and show toast if needed

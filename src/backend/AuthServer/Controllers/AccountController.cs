@@ -1,261 +1,89 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using AuthServer.Data;
-using AuthServer.Models;
-using System.Security.Claims;
+using AuthServer.Models.Requests;
+using AuthServer.Models.Mappers;
+using AuthServer.Services.Interfaces;
+using Shared.Logging.Services;
+using Shared.Common;
+using Shared.Extensions;
 
 namespace AuthServer.Controllers;
 
 [ApiController]
 [Route("[controller]")]
 public class AccountController(
-    UserManager<AppUser> userManager,
-    SignInManager<AppUser> signInManager,
-    ILogger<AccountController> logger) : ControllerBase
+    IAuthenticationService authenticationService,
+    IUserService userService,
+    ICorrelationIdService correlationIdService) : ControllerBase
 {
-    private readonly UserManager<AppUser> _userManager = userManager;
-    private readonly SignInManager<AppUser> _signInManager = signInManager;
-    private readonly ILogger<AccountController> _logger = logger;
-
     [HttpPost("register")]
-    public async Task<ActionResult<AccountResponse>> Register([FromBody] RegisterRequest request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        if (!ModelState.IsValid)
+        var command = request.ToDomain();
+        var result = await authenticationService.RegisterAsync(command);
+        
+        if (result.IsFailure)
         {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Registration failed",
-                Errors = errors
-            });
+            return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var user = new AppUser
-        {
-            UserName = request.Email,
-            Email = request.Email,
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            EmailConfirmed = true // For demo purposes, skip email confirmation
-        };
-
-        var result = await _userManager.CreateAsync(user, request.Password);
-
-        if (result.Succeeded)
-        {
-            _logger.LogInformation("User created a new account with password for {Email}", request.Email);
-
-            return Ok(new AccountResponse
-            {
-                Success = true,
-                Message = "User registered successfully"
-            });
-        }
-
-        var registrationErrors = result.Errors.Select(e => e.Description).ToList();
-        return BadRequest(new AccountResponse
-        {
-            Success = false,
-            Message = "Registration failed",
-            Errors = registrationErrors
-        });
+        var response = result.Value.ToPresentation();
+        return Ok(response);
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AccountResponse>> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        if (!ModelState.IsValid)
+        var command = request.ToDomain();
+        var result = await authenticationService.AuthenticateAsync(command);
+        
+        if (result.IsFailure)
         {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Login failed",
-                Errors = errors
-            });
+            return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var result = await _signInManager.PasswordSignInAsync(
-            request.Email, 
-            request.Password, 
-            request.RememberMe, 
-            lockoutOnFailure: false);
-
-        if (result.Succeeded)
-        {
-            _logger.LogInformation("User logged in: {Email}", request.Email);
-
-            return Ok(new AccountResponse
-            {
-                Success = true,
-                Message = "Login successful"
-            });
-        }
-
-        if (result.IsLockedOut)
-        {
-            _logger.LogWarning("User account locked out: {Email}", request.Email);
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Account is locked out"
-            });
-        }
-
-        return BadRequest(new AccountResponse
-        {
-            Success = false,
-            Message = "Invalid login attempt"
-        });
+        var response = result.Value.ToPresentation();
+        return Ok(response);
     }
 
     [HttpPost("logout")]
-    public async Task<ActionResult<AccountResponse>> Logout()
+    [Authorize]
+    public async Task<IActionResult> Logout()
     {
-        await _signInManager.SignOutAsync();
-        _logger.LogInformation("User logged out");
+        var userId = HttpContext.GetUserId();
+        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
+        if (userIdResult.IsFailure)
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
 
-        return Ok(new AccountResponse
-        {
-            Success = true,
-            Message = "Logout successful"
-        });
-    }
-
-    [HttpPost("forgot-password")]
-    public async Task<ActionResult<AccountResponse>> ForgotPassword([FromBody] ForgotPasswordRequest request)
-    {
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Invalid request",
-                Errors = errors
-            });
-        }
-
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null)
-        {
-            // Don't reveal that the user does not exist
-            return Ok(new AccountResponse
-            {
-                Success = true,
-                Message = "If the email exists, a password reset link has been sent"
-            });
-        }
-
-        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var result = await authenticationService.LogoutAsync(userId);
         
-        // In a real application, you would send this token via email
-        // For demo purposes, we'll return it in the response
-        _logger.LogInformation("Password reset token generated for {Email}: {Token}", request.Email, token);
-
-        return Ok(new AccountResponse
+        if (result.IsFailure)
         {
-            Success = true,
-            Message = "Password reset link has been sent to your email",
-            // In production, remove this line and send the token via email
-            Errors = new List<string> { $"Reset Token: {token}" }
-        });
-    }
-
-    [HttpPost("reset-password")]
-    public async Task<ActionResult<AccountResponse>> ResetPassword([FromBody] ResetPasswordRequest request)
-    {
-        if (!ModelState.IsValid)
-        {
-            var errors = ModelState.Values
-                .SelectMany(v => v.Errors)
-                .Select(e => e.ErrorMessage)
-                .ToList();
-
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Invalid request",
-                Errors = errors
-            });
+            return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null)
-        {
-            return BadRequest(new AccountResponse
-            {
-                Success = false,
-                Message = "Invalid request"
-            });
-        }
-
-        var result = await _userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
-
-        if (result.Succeeded)
-        {
-            _logger.LogInformation("Password reset successful for {Email}", request.Email);
-
-            return Ok(new AccountResponse
-            {
-                Success = true,
-                Message = "Password has been reset successfully"
-            });
-        }
-
-        var resetErrors = result.Errors.Select(e => e.Description).ToList();
-        return BadRequest(new AccountResponse
-        {
-            Success = false,
-            Message = "Password reset failed",
-            Errors = resetErrors
-        });
+        return Ok(new { success = true, message = "Logout successful" });
     }
 
     [HttpGet("profile")]
-    public async Task<ActionResult<object>> GetProfile([FromQuery] string? userId = null)
+    [Authorize]
+    public async Task<IActionResult> GetProfile()
     {
-        AppUser? user = null;
+        var userId = HttpContext.GetUserId();
+        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
+        if (userIdResult.IsFailure)
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+
+        var result = await userService.GetUserByIdAsync(userId);
         
-        if (!string.IsNullOrEmpty(userId))
+        if (result.IsFailure)
         {
-            // Get user by ID from query parameter (for BFF requests)
-            user = await _userManager.FindByIdAsync(userId);
-        }
-        else
-        {
-            // Try to get user from claims (for direct authenticated requests)
-            user = await _userManager.GetUserAsync(User);
-        }
-        
-        if (user == null)
-        {
-            return NotFound(new { error = "User not found" });
+            return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        return Ok(new
-        {
-            user.Id,
-            user.Email,
-            user.FirstName,
-            user.LastName,
-            user.PhoneNumber,
-            user.CreatedAt,
-            user.IsActive
+        return Ok(new {
+            success = true,
+            data = result.Value
         });
     }
-} 
+}

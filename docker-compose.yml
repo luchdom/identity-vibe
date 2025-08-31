@@ -21,6 +21,146 @@ services:
       retries: 5
       start_period: 10s
 
+  # SigNoz Infrastructure
+  # Zookeeper for ClickHouse
+  zookeeper:
+    image: bitnami/zookeeper:3.8.1
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_PORT_NUMBER=2181
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    networks:
+      - identity-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc -w 2 localhost 2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ClickHouse Database for SigNoz
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.7.2-alpine
+    tty: true
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: 50m
+        max-file: "3"
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'localhost:8123/ping']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+    container_name: signoz-clickhouse
+    volumes:
+      - ./deploy/clickhouse-config.xml:/etc/clickhouse-server/config.xml
+      - ./deploy/clickhouse-users.xml:/etc/clickhouse-server/users.xml
+      - ./deploy/clickhouse-cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - ./deploy/clickhouse-storage.xml:/etc/clickhouse-server/config.d/storage.xml
+      - ./deploy/user_scripts.sql:/docker-entrypoint-initdb.d/init.sql
+      - clickhouse_data:/var/lib/clickhouse/
+    environment:
+      - CLICKHOUSE_DB=signoz_traces
+      - CLICKHOUSE_USER=signoz
+      - CLICKHOUSE_PASSWORD=signoz_password
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    networks:
+      - identity-network
+
+  # AlertManager for SigNoz
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    volumes:
+      - ./deploy/alertmanager-config.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.external-url=http://localhost:9093
+    ports:
+      - "9093:9093"
+    networks:
+      - identity-network
+
+  # SigNoz Query Service
+  query-service:
+    image: signoz/query-service:0.31.0
+    command: ["-config=/root/config/prometheus.yml"]
+    volumes:
+      - ./deploy/prometheus.yml:/root/config/prometheus.yml
+      - ./deploy/dashboards:/root/config/dashboards
+    environment:
+      - ClickHouseUrl=tcp://clickhouse:9000/?database=signoz_traces
+      - STORAGE=clickhouse
+      - GODEBUG=netdns=go
+      - TELEMETRY_ENABLED=true
+      - DEPLOYMENT_TYPE=docker-standalone-amd
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - "6060:6060"
+      - "8080:8080"
+    networks:
+      - identity-network
+
+  # SigNoz Frontend UI
+  frontend:
+    image: signoz/frontend:0.31.0
+    restart: on-failure
+    depends_on:
+      - alertmanager
+      - query-service
+    ports:
+      - "3301:3301"
+    volumes:
+      - ./common/config:/var/www/html/config
+    networks:
+      - identity-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: signoz/signoz-otel-collector:0.88.7-v0.31.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./deploy/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=signoz-otel-collector,service.version=0.31.0
+    ports:
+      - "1777:1777"     # pprof extension
+      - "8888:8888"     # Prometheus metrics
+      - "8889:8889"     # Prometheus exporter metrics
+      - "13133:13133"   # health_check extension
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+      - "9411:9411"     # Zipkin receiver
+      - "14250:14250"   # Jaeger gRPC
+      - "14268:14268"   # Jaeger HTTP
+    restart: on-failure
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - identity-network
+
   # AuthServer
   authserver:
     build:
@@ -30,11 +170,17 @@ services:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=postgres
+      - OTEL_SERVICE_NAME=authserver
+      - OTEL_SERVICE_VERSION=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=authserver,service.version=1.0.0,deployment.environment=docker
     ports:
       - "5000:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - identity-network
     volumes:
@@ -49,27 +195,37 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
+      - OTEL_SERVICE_NAME=gateway
+      - OTEL_SERVICE_VERSION=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=gateway,service.version=1.0.0,deployment.environment=docker
     ports:
       - "5002:8080"
     depends_on:
       - authserver
-      - servicea
+      - orders
+      - otel-collector
     networks:
       - identity-network
     restart: unless-stopped
 
-  # ServiceA
-  servicea:
+  # Orders Service
+  orders:
     build:
       context: .
-      dockerfile: src/backend/ServiceA/Dockerfile
+      dockerfile: src/backend/Orders/Dockerfile
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
+      - OTEL_SERVICE_NAME=orders
+      - OTEL_SERVICE_VERSION=1.0.0
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=orders,service.version=1.0.0,deployment.environment=docker
     ports:
       - "5003:8080"
     depends_on:
       - authserver
+      - otel-collector
     networks:
       - identity-network
     restart: unless-stopped
@@ -89,6 +245,8 @@ services:
 
 volumes:
   postgres_data:
+  clickhouse_data:
+  zookeeper_data:
 
 networks:
   identity-network:

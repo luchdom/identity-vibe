@@ -12,13 +12,13 @@ services:
       - /app/obj
     command: dotnet watch run --urls http://+:80
 
-  # ServiceA with development settings
-  servicea:
+  # Orders Service with development settings
+  orders:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
     volumes:
-      - ./src/backend/ServiceA:/app
+      - ./src/backend/Orders:/app
       - /app/bin
       - /app/obj
     command: dotnet watch run --urls http://+:80

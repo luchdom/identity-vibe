@@ -20,26 +20,44 @@ public class AuthProxyService(
         {
             logger.LogInformation("Service: Processing login request for {Email}", request.Email);
             
-            // Use Connector for external HTTP call
+            // Use Connector for external HTTP call to OAuth2 token endpoint
             var response = await authServerConnector.LoginAsync(request);
             var responseContent = await response.Content.ReadAsStringAsync();
             
             if (response.IsSuccessStatusCode)
             {
-                var authResponse = JsonSerializer.Deserialize<AuthResponse>(responseContent, new JsonSerializerOptions 
+                // Parse OAuth2 token response
+                var tokenResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent, new JsonSerializerOptions 
                 { 
                     PropertyNameCaseInsensitive = true 
                 });
                 
-                logger.LogInformation("Service: Login successful for {Email}", request.Email);
-                return authResponse ?? new AuthResponse { Success = false, Message = "Invalid response" };
+                if (tokenResponse?.AccessToken != null)
+                {
+                    logger.LogInformation("Service: Login successful for {Email}", request.Email);
+                    return new AuthResponse 
+                    { 
+                        Success = true, 
+                        Message = "Login successful",
+                        AccessToken = tokenResponse.AccessToken,
+                        User = new { Email = request.Email } // Basic user info
+                    };
+                }
             }
             
-            logger.LogWarning("Service: Login failed for {Email}", request.Email);
+            // Parse error response if available
+            var errorResponse = JsonSerializer.Deserialize<TokenResponse>(responseContent, new JsonSerializerOptions 
+            { 
+                PropertyNameCaseInsensitive = true 
+            });
+            
+            var errorMessage = errorResponse?.ErrorDescription ?? "Authentication failed";
+            logger.LogWarning("Service: Login failed for {Email}: {Error}", request.Email, errorMessage);
+            
             return new AuthResponse 
             { 
                 Success = false, 
-                Message = "Authentication failed" 
+                Message = errorMessage 
             };
         }
         catch (Exception ex)

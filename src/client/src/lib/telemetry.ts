@@ -40,7 +40,7 @@ export function initializeTelemetry() {
         propagateTraceHeaderCorsUrls: [
           /localhost:5002/, // Gateway
           /localhost:5000/, // AuthServer
-          /localhost:5003/, // ServiceA
+          /localhost:5003/, // Orders
         ],
         clearTimingResources: true,
         requestHook: (span, request) => {

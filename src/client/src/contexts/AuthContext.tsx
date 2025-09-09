@@ -50,8 +50,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (storedAccessToken && storedUser) {
         try {
-          // Verify token is still valid by making a request to user info
-          const response = await api.get('/auth/user');
+          // Verify token is still valid by making a request to user profile
+          const response = await api.get('/auth/profile');
           const serverUser = response.data;
           
           setAuthState({
@@ -93,26 +93,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         password 
       });
 
-      const { access_token, refresh_token } = response.data;
+      const { accessToken, refreshToken, user } = response.data;
       
-      // Get user info after successful login
-      const userResponse = await api.get('/auth/user', {
-        headers: { Authorization: `Bearer ${access_token}` }
-      });
-      
-      const user = userResponse.data;
-      
-      // Store tokens and user data
-      localStorage.setItem('accessToken', access_token);
-      if (refresh_token) {
-        localStorage.setItem('refreshToken', refresh_token);
+      // Store tokens and user data (user data is already included in login response)
+      localStorage.setItem('accessToken', accessToken);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
       }
       localStorage.setItem('user', JSON.stringify(user));
 
       setAuthState({
         user,
-        accessToken: access_token,
-        refreshToken: refresh_token || null,
+        accessToken,
+        refreshToken: refreshToken || null,
         isLoading: false,
         isAuthenticated: true,
       });

@@ -61,7 +61,7 @@ The Docker Compose setup includes the following services:
   - User registration and management
   - Password reset functionality
 
-### 3. ServiceA
+### 3. Orders
 - **Port**: `5002` (HTTP), `5003` (HTTPS)
 - **Dependencies**: AuthServer
 - **Features**:
@@ -85,8 +85,8 @@ The Docker Compose setup includes the following services:
 | PostgreSQL | 5432 | 5432 | TCP |
 | AuthServer | 80 | 5000 | HTTP |
 | AuthServer | 443 | 5001 | HTTPS |
-| ServiceA | 80 | 5002 | HTTP |
-| ServiceA | 443 | 5003 | HTTPS |
+| Orders | 80 | 5002 | HTTP |
+| Orders | 443 | 5003 | HTTPS |
 
 ## Development vs Production
 
@@ -187,10 +187,10 @@ curl -X POST http://localhost:5000/api/account/register \
 ```bash
 curl -X POST http://localhost:5000/connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&username=user@example.com&password=Password123!&client_id=web-client&client_secret=secret&scope=data.read data.write"
+  -d "grant_type=password&username=user@example.com&password=Password123!&client_id=web-client&client_secret=secret&scope=orders.read orders.write"
 ```
 
-### 3. Access ServiceA
+### 3. Access Orders
 ```bash
 curl -X GET http://localhost:5002/api/data \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"

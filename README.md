@@ -34,7 +34,7 @@ pnpm dev
 ### Services
 - **AuthServer** (5000): OAuth2/OIDC authentication server
 - **Gateway** (5002): BFF (Backend for Frontend) proxy
-- **ServiceA** (5003): Protected resource API
+- **Orders** (5003): Protected resource API
 - **Frontend** (5173): React TypeScript application
 
 ### Key Features
@@ -53,7 +53,7 @@ src/
 ├── backend/
 │   ├── AuthServer/          # OAuth2 authentication server
 │   ├── Gateway/             # BFF proxy service
-│   └── ServiceA/            # Resource API
+│   └── Orders/            # Resource API
 └── client/                  # React frontend application
 
 docs/                        # Detailed documentation
@@ -72,7 +72,7 @@ CLAUDE.md                    # AI assistant guidance (condensed)
 # Run locally (requires PostgreSQL)
 cd src/backend/AuthServer && dotnet run
 cd src/backend/Gateway && dotnet run
-cd src/backend/ServiceA && dotnet run
+cd src/backend/Orders && dotnet run
 ```
 
 ### Frontend (React + TypeScript)
@@ -112,7 +112,7 @@ npx playwright test          # Headless testing
 ### Unit Testing
 ```bash
 # Backend
-dotnet test IdentitySolution.sln
+dotnet test ArchZ.sln
 
 # Frontend  
 cd src/client && pnpm test
@@ -239,7 +239,7 @@ identity/
 │   ├── appsettings.Docker.json
 │   ├── Dockerfile
 │   └── Program.cs
-├── ServiceA/                   # Resource API
+├── Orders/                   # Resource API
 │   ├── Configuration/
 │   │   ├── AuthConfiguration.cs
 │   │   ├── AuthenticationProviders.cs
@@ -287,7 +287,7 @@ identity/
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
 ├── docker-compose.prod.yml
-└── IdentitySolution.sln
+└── ArchZ.sln
 ```
 
 ## Features
@@ -314,10 +314,10 @@ identity/
 - **Request Transformation** and header forwarding
 - **Authorization Policy** enforcement on routes
 
-### ServiceA
+### Orders
 - **JWT Bearer** authentication with token validation
 - **Dynamic Authorization Policies** based on appsettings.json
-- **Scope-based** access control (internal.servicea.read, internal.servicea.create, etc.)
+- **Scope-based** access control (internal.orders.read, internal.orders.create, etc.)
 - **Multi-issuer** support for token validation
 - **CORS** configuration
 - **Token Information** endpoint for debugging
@@ -344,37 +344,37 @@ The AuthServer uses a configuration-driven approach for scopes and clients defin
 #### User Scopes
 - **Default Scopes**: `openid`, `profile`, `email`
 - **Role-based Scopes**:
-  - **Admin**: All ServiceA scopes + admin scopes
-  - **User**: `data.read data.write`
-  - **Service**: ServiceA CRUD scopes
+  - **Admin**: All Orders scopes + admin scopes
+  - **User**: `orders.read orders.write`
+  - **Service**: Orders CRUD scopes
 
 #### Service Clients
 1. **web-client** (Password Flow)
    - Client ID: `web-client`
    - Client Secret: `secret`
-   - Scopes: `openid`, `profile`, `email`, `data.read data.write`
+   - Scopes: `openid`, `profile`, `email`, `orders.read orders.write`
    - Grant Types: Password, Refresh Token
 
-2. **ServiceA** (Client Credentials Flow)
-   - Client ID: `ServiceA`
-   - Client Secret: `servicea-secret`
-   - Scopes: `internal.servicea.read`, `internal.servicea.create`, `internal.servicea.update`, `internal.servicea.delete`
+2. **Orders** (Client Credentials Flow)
+   - Client ID: `Orders`
+   - Client Secret: `orders-secret`
+   - Scopes: `internal.orders.read`, `internal.orders.create`, `internal.orders.update`, `internal.orders.delete`
    - Grant Types: Client Credentials
 
 3. **mobile-app** (Password Flow)
    - Client ID: `mobile-app`
    - Client Secret: `mobile-secret`
-   - Scopes: `openid`, `profile`, `email`, `data.read data.write`, `offline_access`
+   - Scopes: `openid`, `profile`, `email`, `orders.read orders.write`, `offline_access`
    - Grant Types: Password, Refresh Token
 
 4. **gateway-bff** (Password + Client Credentials Flow)
    - Client ID: `gateway-bff`
    - Client Secret: `gateway-secret`
-   - Scopes: `openid`, `profile`, `email`, `data.read data.write`, `offline_access`
+   - Scopes: `openid`, `profile`, `email`, `orders.read orders.write`, `offline_access`
    - Grant Types: Password, Refresh Token, Client Credentials
 
-### ServiceA Authorization Policies
-ServiceA uses dynamic authorization policies defined in `appsettings.json`:
+### Orders Authorization Policies
+Orders uses dynamic authorization policies defined in `appsettings.json`:
 
 ```json
 {
@@ -384,17 +384,17 @@ ServiceA uses dynamic authorization policies defined in `appsettings.json`:
         "Authority": "https://localhost:5000",
         "AuthorizationPolicies": {
           "UserIdentity": {
-            "Scopes": [ "data.read data.write" ]
+            "Scopes": [ "orders.read orders.write" ]
           }
         }
       },
       "ServiceIdentity": {
         "Authority": "https://localhost:5000",
         "AuthorizationPolicies": {
-          "ServiceIdentityRead": { "Scopes": [ "internal.servicea.read" ] },
-          "ServiceIdentityCreate": { "Scopes": [ "internal.servicea.create" ] },
-          "ServiceIdentityUpdate": { "Scopes": [ "internal.servicea.update" ] },
-          "ServiceIdentityDelete": { "Scopes": [ "internal.servicea.delete" ] }
+          "ServiceIdentityRead": { "Scopes": [ "internal.orders.read" ] },
+          "ServiceIdentityCreate": { "Scopes": [ "internal.orders.create" ] },
+          "ServiceIdentityUpdate": { "Scopes": [ "internal.orders.update" ] },
+          "ServiceIdentityDelete": { "Scopes": [ "internal.orders.delete" ] }
         }
       }
     }
@@ -445,12 +445,12 @@ For detailed Docker instructions, see [DOCKER.md](DOCKER.md).
    ```
    The Gateway will run on `http://localhost:5002`
 
-3. **Start ServiceA**:
+3. **Start Orders**:
    ```bash
-   cd src/backend/ServiceA
+   cd src/backend/Orders
    dotnet run
    ```
-   ServiceA will run on `http://localhost:5001`
+   Orders will run on `http://localhost:5001`
 
 ### Running the Frontend Application
 
@@ -563,7 +563,7 @@ curl -X POST http://localhost:5002/account/register \
 ```bash
 curl -X POST http://localhost:5000/connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&username=admin@example.com&password=Admin123!&client_id=web-client&client_secret=secret&scope=data.read data.write"
+  -d "grant_type=password&username=admin@example.com&password=Admin123!&client_id=web-client&client_secret=secret&scope=orders.read orders.write"
 ```
 
 **Via Gateway BFF**:
@@ -616,22 +616,22 @@ curl -X POST https://localhost:5000/api/account/reset-password \
 ```bash
 curl -X POST http://localhost:5000/connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials&client_id=ServiceA&client_secret=servicea-secret&scope=internal.servicea.read internal.servicea.create"
+  -d "grant_type=client_credentials&client_id=Orders&client_secret=orders-secret&scope=internal.orders.read internal.orders.create"
 ```
 
-### 6. Access ServiceA Endpoints
+### 6. Access Orders Endpoints
 
-**Direct to ServiceA**:
+**Direct to Orders**:
 ```bash
-# Get Data (requires internal.servicea.read scope)
+# Get Data (requires internal.orders.read scope)
 curl -X GET http://localhost:5001/data \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
-# Get User Data (requires data.read data.write scope)
+# Get User Data (requires orders.read orders.write scope)
 curl -X GET http://localhost:5001/data/user \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
-# Create Data (requires internal.servicea.create scope)
+# Create Data (requires internal.orders.create scope)
 curl -X POST http://localhost:5001/data \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -640,15 +640,15 @@ curl -X POST http://localhost:5001/data \
 
 **Via Gateway**:
 ```bash
-# Get Data through Gateway (requires internal.servicea.read scope)
+# Get Data through Gateway (requires internal.orders.read scope)
 curl -X GET http://localhost:5002/data \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
-# Get User Data through Gateway (requires data.read data.write scope)
+# Get User Data through Gateway (requires orders.read orders.write scope)
 curl -X GET http://localhost:5002/data/user \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
-# Create Data through Gateway (requires internal.servicea.create scope)
+# Create Data through Gateway (requires internal.orders.create scope)
 curl -X POST http://localhost:5002/data \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
@@ -680,14 +680,14 @@ curl -X POST http://localhost:5002/data \
 - `POST /account/*` - Proxied AuthServer account endpoints
 - `GET /scope/*` - Proxied AuthServer scope endpoints
 - `POST /connect/*` - Proxied AuthServer OAuth endpoints
-- `GET|POST|PUT|DELETE /data/*` - Proxied ServiceA data endpoints
+- `GET|POST|PUT|DELETE /data/*` - Proxied Orders data endpoints
 
-### ServiceA Endpoints (localhost:5001)
-- `GET /data` - Get all data (requires `internal.servicea.read` scope)
-- `GET /data/user` - Get user-specific data (requires `data.read data.write` scope)
-- `POST /data` - Create new data (requires `internal.servicea.create` scope)
-- `PUT /data/{id}` - Update data (requires `internal.servicea.update` scope)
-- `DELETE /data/{id}` - Delete data (requires `internal.servicea.delete` scope)
+### Orders Endpoints (localhost:5001)
+- `GET /data` - Get all data (requires `internal.orders.read` scope)
+- `GET /data/user` - Get user-specific data (requires `orders.read orders.write` scope)
+- `POST /data` - Create new data (requires `internal.orders.create` scope)
+- `PUT /data/{id}` - Update data (requires `internal.orders.update` scope)
+- `DELETE /data/{id}` - Delete data (requires `internal.orders.delete` scope)
 - `GET /data/info` - Get token information (requires authentication)
 
 ## Code Organization
@@ -736,12 +736,12 @@ docker-compose -f docker-compose.prod.yml up --build -d
 - **PostgreSQL**: Database with persistent storage
 - **AuthServer**: Authentication server with Identity
 - **Gateway**: YARP-based BFF with authentication handling
-- **ServiceA**: Resource API with authorization
+- **Orders**: Resource API with authorization
 
 ### Docker Ports
 - AuthServer: `http://localhost:5000`
 - Gateway: `http://localhost:5002`
-- ServiceA: `http://localhost:5003`
+- Orders: `http://localhost:5003`
 - PostgreSQL: `localhost:5432`
 
 For complete Docker documentation, see [DOCKER.md](DOCKER.md).

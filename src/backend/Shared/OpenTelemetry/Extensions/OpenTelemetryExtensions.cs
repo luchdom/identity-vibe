@@ -119,16 +119,18 @@ public static class OpenTelemetryExtensions
                     });
                 }
 
-                // Configure OTLP exporter
+                // Configure OTLP exporter (only if endpoint is configured)
                 var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
-                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint")
-                    ?? "http://localhost:4317";
+                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
 
-                tracerProviderBuilder.AddOtlpExporter(options =>
+                if (!string.IsNullOrEmpty(otlpEndpoint))
                 {
-                    options.Endpoint = new Uri(otlpEndpoint);
-                    options.Protocol = OtlpExportProtocol.Grpc;
-                });
+                    tracerProviderBuilder.AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri(otlpEndpoint);
+                        options.Protocol = OtlpExportProtocol.Grpc;
+                    });
+                }
 
                 // Add console exporter for development debugging
                 if (builder.Environment.IsDevelopment())
@@ -145,16 +147,18 @@ public static class OpenTelemetryExtensions
                     .AddRuntimeInstrumentation()     // .NET runtime metrics (GC, memory, etc.)
                     .AddProcessInstrumentation();    // Process metrics (CPU, memory usage)
 
-                // Configure OTLP exporter for metrics
+                // Configure OTLP exporter for metrics (only if endpoint is configured)
                 var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
-                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint")
-                    ?? "http://localhost:4317";
+                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
 
-                meterProviderBuilder.AddOtlpExporter(options =>
+                if (!string.IsNullOrEmpty(otlpEndpoint))
                 {
-                    options.Endpoint = new Uri(otlpEndpoint);
-                    options.Protocol = OtlpExportProtocol.Grpc;
-                });
+                    meterProviderBuilder.AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri(otlpEndpoint);
+                        options.Protocol = OtlpExportProtocol.Grpc;
+                    });
+                }
 
                 // Add console exporter for development debugging
                 if (builder.Environment.IsDevelopment())
@@ -184,21 +188,24 @@ public static class OpenTelemetryExtensions
                     rollOnFileSizeLimit: true
                 );
 
-            // Add OpenTelemetry sink
+            // Add OpenTelemetry sink (only if endpoint is configured)
             var otlpEndpoint = context.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
-                ?? context.Configuration.GetValue<string>("OpenTelemetry:Endpoint")
-                ?? "http://localhost:4318";
+                ?? context.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
 
-            configuration.WriteTo.OpenTelemetry(options =>
+            if (!string.IsNullOrEmpty(otlpEndpoint))
             {
-                options.Endpoint = $"{otlpEndpoint.Replace("4317", "4318")}/v1/logs";
-                options.ResourceAttributes = new Dictionary<string, object>
+                var logEndpoint = otlpEndpoint.Contains("4317") ? otlpEndpoint.Replace("4317", "4318") : $"{otlpEndpoint}:4318";
+                configuration.WriteTo.OpenTelemetry(options =>
                 {
-                    ["service.name"] = serviceName,
-                    ["service.version"] = serviceVersion,
-                    ["service.namespace"] = "identity-system"
-                };
-            });
+                    options.Endpoint = $"{logEndpoint}/v1/logs";
+                    options.ResourceAttributes = new Dictionary<string, object>
+                    {
+                        ["service.name"] = serviceName,
+                        ["service.version"] = serviceVersion,
+                        ["service.namespace"] = "identity-system"
+                    };
+                });
+            }
 
             // Environment-specific configuration
             if (context.HostingEnvironment.IsDevelopment())

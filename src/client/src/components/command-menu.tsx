@@ -2,7 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, ChevronRight, Laptop, Moon, Sun } from 'lucide-react'
 import { useSearch } from '@/contexts/SearchProvider'
-import { useTheme } from '@/contexts/ThemeContext'
+import { useTheme } from '@/context/theme-provider'
 import {
   CommandDialog,
   CommandEmpty,

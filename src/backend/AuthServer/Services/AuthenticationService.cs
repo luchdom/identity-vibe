@@ -1,63 +1,15 @@
-using AuthServer.Entities;
-using AuthServer.Entities.Mappers;
 using AuthServer.Models.Commands;
 using AuthServer.Models.ViewModels;
 using AuthServer.Repositories.Interfaces;
 using AuthServer.Services.Interfaces;
-using Microsoft.AspNetCore.Identity;
 using Shared.Common;
 
 namespace AuthServer.Services;
 
 public class AuthenticationService(
-    UserManager<User> userManager,
-    SignInManager<User> signInManager,
     IUserRepository userRepository,
     ILogger<AuthenticationService> logger) : IAuthenticationService
 {
-    public async Task<Result<AuthenticationData>> AuthenticateAsync(AuthenticateUserCommand command)
-    {
-        try
-        {
-            logger.LogInformation("Authentication attempt for {Email}", command.Email);
-
-            var user = await userRepository.GetByEmailAsync(command.Email);
-            if (user == null)
-            {
-                logger.LogWarning("Authentication failed: User not found for {Email}", command.Email);
-                return Result<AuthenticationData>.Failure(CommonErrors.UserNotFound);
-            }
-
-            var result = await signInManager.CheckPasswordSignInAsync(user, command.Password, lockoutOnFailure: false);
-            if (!result.Succeeded)
-            {
-                logger.LogWarning("Authentication failed: Invalid credentials for {Email}", command.Email);
-                return Result<AuthenticationData>.Failure(CommonErrors.InvalidCredentials);
-            }
-
-            // Get user roles
-            var roles = await userManager.GetRolesAsync(user);
-            var authenticatedUser = user.ToDomain(roles);
-
-            // Generate token (simplified - should use proper JWT service)
-            var token = GenerateToken(authenticatedUser);
-            
-            var authData = new AuthenticationData
-            {
-                User = authenticatedUser,
-                AccessToken = token,
-                GrantedScopes = ["openid", "profile", "email"]
-            };
-
-            logger.LogInformation("Authentication successful for {Email}", command.Email);
-            return Result<AuthenticationData>.Success(authData);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Authentication error for {Email}", command.Email);
-            return Result<AuthenticationData>.Failure("AUTH_ERROR", "An error occurred during authentication");
-        }
-    }
 
     public async Task<Result<RegistrationData>> RegisterAsync(RegisterUserCommand command)
     {
@@ -65,21 +17,18 @@ public class AuthenticationService(
         {
             logger.LogInformation("Registration attempt for {Email}", command.Email);
 
-            // Check if user already exists
             if (await userRepository.ExistsAsync(command.Email))
             {
                 logger.LogWarning("Registration failed: User already exists for {Email}", command.Email);
                 return Result<RegistrationData>.Failure(CommonErrors.UserAlreadyExists);
             }
 
-            // Validate password confirmation
             if (command.Password != command.ConfirmPassword)
             {
                 return Result<RegistrationData>.Failure("PASSWORD_MISMATCH", "Passwords do not match");
             }
 
-            // Create new user entity
-            var user = new User
+            var newUserViewModel = new UserViewModel
             {
                 Id = Guid.NewGuid().ToString(),
                 Email = command.Email,
@@ -87,23 +36,32 @@ public class AuthenticationService(
                 FirstName = command.FirstName,
                 LastName = command.LastName,
                 EmailConfirmed = true,
+                PhoneNumber = null,
+                PhoneNumberConfirmed = false,
+                TwoFactorEnabled = false,
                 CreatedAt = DateTime.UtcNow,
-                IsActive = true
+                UpdatedAt = null,
+                IsActive = true,
+                LockoutEnd = null,
+                LockoutEnabled = true,
+                AccessFailedCount = 0
             };
 
-            // Create user with password
-            var result = await userManager.CreateAsync(user, command.Password);
-            if (!result.Succeeded)
+            var createdUser = await userRepository.CreateAsync(newUserViewModel, command.Password);
+            
+            await userRepository.AddToRoleAsync(createdUser.Id, "User");
+
+            var authenticatedUser = new AuthenticatedUser
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                logger.LogWarning("Registration failed for {Email}: {Errors}", command.Email, errors);
-                return Result<RegistrationData>.Failure("REGISTRATION_FAILED", errors);
-            }
-
-            // Add default role
-            await userManager.AddToRoleAsync(user, "User");
-
-            var authenticatedUser = user.ToDomain(["User"]);
+                Id = createdUser.Id,
+                Email = createdUser.Email,
+                FirstName = createdUser.FirstName,
+                LastName = createdUser.LastName,
+                Roles = ["User"],
+                IsActive = createdUser.IsActive,
+                CreatedAt = createdUser.CreatedAt
+            };
+            
             var registrationData = new RegistrationData
             {
                 User = authenticatedUser
@@ -119,27 +77,20 @@ public class AuthenticationService(
         }
     }
 
-    public async Task<Result> LogoutAsync(string userId)
+    public Task<Result> LogoutAsync(string userId)
     {
         try
         {
             logger.LogInformation("Logout attempt for user {UserId}", userId);
             
-            await signInManager.SignOutAsync();
-            
             logger.LogInformation("Logout successful for user {UserId}", userId);
-            return Result.Success();
+            return Task.FromResult(Result.Success());
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Logout error for user {UserId}", userId);
-            return Result.Failure("LOGOUT_ERROR", "An error occurred during logout");
+            return Task.FromResult(Result.Failure("LOGOUT_ERROR", "An error occurred during logout"));
         }
     }
 
-    private static string GenerateToken(AuthenticatedUser user)
-    {
-        // Simplified token generation - should use proper JWT service
-        return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{user.Id}:{DateTime.UtcNow:O}"));
-    }
 }

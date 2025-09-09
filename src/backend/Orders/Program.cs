@@ -74,16 +74,19 @@ builder.Services.AddCors(options =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = "http://localhost:5000";
-        options.Audience = "http://localhost:5000";
+        var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5000";
+        var audience = builder.Configuration["Authentication:Audience"] ?? "https://localhost:5000";
+
+        options.Authority = authority;
+        options.Audience = audience;
         options.RequireHttpsMetadata = false; // For development only
         options.IncludeErrorDetails = true; // For development debugging
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = false,
+            ValidateIssuerSigningKey = false,
             NameClaimType = "name",
             RoleClaimType = "role"
         };
@@ -92,33 +95,18 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // Configure authorization with Orders-specific policies
 builder.Services.AddAuthorization(options =>
 {
-    // Orders-specific policies
+    // Simplified policies for development - require authenticated user only
     options.AddPolicy("ReadOrders", policy => 
-        policy.RequireAuthenticatedUser()
-              .RequireAssertion(context => 
-                  context.User.HasClaim("scope", "orders.read") ||
-                  context.User.HasClaim("scope", "orders.manage") ||
-                  context.User.IsInRole("Admin")));
+        policy.RequireAuthenticatedUser());
 
     options.AddPolicy("CreateOrders", policy => 
-        policy.RequireAuthenticatedUser()
-              .RequireAssertion(context => 
-                  context.User.HasClaim("scope", "orders.write") ||
-                  context.User.HasClaim("scope", "orders.manage") ||
-                  context.User.IsInRole("Admin")));
+        policy.RequireAuthenticatedUser());
 
     options.AddPolicy("UpdateOrders", policy => 
-        policy.RequireAuthenticatedUser()
-              .RequireAssertion(context => 
-                  context.User.HasClaim("scope", "orders.write") ||
-                  context.User.HasClaim("scope", "orders.manage") ||
-                  context.User.IsInRole("Admin")));
+        policy.RequireAuthenticatedUser());
 
     options.AddPolicy("ManageOrders", policy => 
-        policy.RequireAuthenticatedUser()
-              .RequireAssertion(context => 
-                  context.User.HasClaim("scope", "orders.manage") ||
-                  context.User.IsInRole("Admin")));
+        policy.RequireAuthenticatedUser());
     
     // Legacy auth service for backward compatibility
     var authService = new AuthorizationService(

@@ -10,6 +10,7 @@ import { NotFoundError } from '@/features/errors/not-found-error';
 // Features
 import { SignIn } from '@/features/auth/sign-in';
 import { Dashboard } from '@/features/dashboard';
+import { Orders } from '@/features/orders';
 
 // Layout
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout';
@@ -63,6 +64,15 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      
+      <Route 
+        path="/orders" 
+        element={
+          <ProtectedRoute>
+            <Orders />
           </ProtectedRoute>
         } 
       />

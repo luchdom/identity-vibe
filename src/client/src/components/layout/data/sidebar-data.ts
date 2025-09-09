@@ -6,6 +6,7 @@ import {
   Wrench,
   UserCog,
   Command,
+  ShoppingCart,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -30,6 +31,11 @@ export const sidebarData: SidebarData = {
           title: 'Dashboard',
           url: '/',
           icon: LayoutDashboard,
+        },
+        {
+          title: 'Orders',
+          url: '/orders',
+          icon: ShoppingCart,
         },
       ],
     },

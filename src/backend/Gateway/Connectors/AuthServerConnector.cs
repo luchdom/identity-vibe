@@ -20,19 +20,40 @@ public class AuthServerConnector(
     {
         try
         {
-            logger.LogInformation("Connector: Making HTTP call to AuthServer login endpoint");
+            logger.LogInformation("Connector: Making HTTP call to AuthServer OAuth2 token endpoint");
             
-            var json = JsonSerializer.Serialize(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            // Create OAuth2 token request for password grant
+            var tokenRequest = new TokenRequest
+            {
+                GrantType = "password",
+                ClientId = "gateway-bff",
+                ClientSecret = "gateway-secret",
+                Username = request.Email,
+                Password = request.Password,
+                Scope = "openid profile email orders.read orders.write profile.read profile.write"
+            };
             
-            var response = await httpClient.PostAsync($"{_authServerBaseUrl}/Account/login", content);
+            // Create form-encoded content for OAuth2 token request
+            var formParams = new List<KeyValuePair<string, string>>
+            {
+                new("grant_type", tokenRequest.GrantType),
+                new("client_id", tokenRequest.ClientId),
+                new("client_secret", tokenRequest.ClientSecret),
+                new("username", tokenRequest.Username!),
+                new("password", tokenRequest.Password!),
+                new("scope", tokenRequest.Scope!)
+            };
             
-            logger.LogInformation("Connector: AuthServer login response status: {StatusCode}", response.StatusCode);
+            var content = new FormUrlEncodedContent(formParams);
+            
+            var response = await httpClient.PostAsync($"{_authServerBaseUrl}/connect/token", content);
+            
+            logger.LogInformation("Connector: AuthServer OAuth2 token response status: {StatusCode}", response.StatusCode);
             return response;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Connector: Error calling AuthServer login endpoint");
+            logger.LogError(ex, "Connector: Error calling AuthServer OAuth2 token endpoint");
             throw;
         }
     }
@@ -58,20 +79,30 @@ public class AuthServerConnector(
         }
     }
 
-    public async Task<HttpResponseMessage> LogoutAsync()
+    public async Task<HttpResponseMessage> LogoutAsync(string? accessToken = null)
     {
         try
         {
-            logger.LogInformation("Connector: Making HTTP call to AuthServer logout endpoint");
+            logger.LogInformation("Connector: Making HTTP call to AuthServer OpenIddict logout endpoint");
             
-            var response = await httpClient.PostAsync($"{_authServerBaseUrl}/Account/logout", null);
+            // Create logout request with optional access token
+            var formParams = new List<KeyValuePair<string, string>>();
             
-            logger.LogInformation("Connector: AuthServer logout response status: {StatusCode}", response.StatusCode);
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                formParams.Add(new("access_token", accessToken));
+            }
+            
+            var content = new FormUrlEncodedContent(formParams);
+            
+            var response = await httpClient.PostAsync($"{_authServerBaseUrl}/connect/logout", content);
+            
+            logger.LogInformation("Connector: AuthServer OpenIddict logout response status: {StatusCode}", response.StatusCode);
             return response;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Connector: Error calling AuthServer logout endpoint");
+            logger.LogError(ex, "Connector: Error calling AuthServer OpenIddict logout endpoint");
             throw;
         }
     }

@@ -133,7 +133,8 @@ builder.Services.AddOpenIddict()
         // Register the ASP.NET Core host and configure the ASP.NET Core options
         options.UseAspNetCore()
                .EnableTokenEndpointPassthrough()
-               .EnableAuthorizationEndpointPassthrough();
+               .EnableAuthorizationEndpointPassthrough()
+               .EnableConfigurationEndpointPassthrough();
 
         // Configure JWT tokens
         options.UseAspNetCore()
@@ -150,11 +151,7 @@ builder.Services.AddOpenIddict()
             OpenIddictConstants.Scopes.Email,
             OpenIddictConstants.Scopes.Profile,
             OpenIddictConstants.Scopes.Roles,
-            // Legacy data scopes (for backward compatibility)
-            "data.read",
-            "data.write", 
-            "data.delete",
-            // New Orders-specific scopes
+            // Orders-specific scopes
             "orders.read",
             "orders.write",
             "orders.manage",

@@ -1,16 +1,12 @@
-using AuthServer.Entities;
-using AuthServer.Entities.Mappers;
 using AuthServer.Models.ViewModels;
 using AuthServer.Repositories.Interfaces;
 using AuthServer.Services.Interfaces;
-using Microsoft.AspNetCore.Identity;
 using Shared.Common;
 
 namespace AuthServer.Services;
 
 public class UserService(
     IUserRepository userRepository,
-    UserManager<User> userManager,
     ILogger<UserService> logger) : IUserService
 {
     public async Task<Result<AuthenticatedUser>> GetUserByIdAsync(string id)
@@ -19,15 +15,25 @@ public class UserService(
         {
             logger.LogDebug("Getting user by ID: {UserId}", id);
 
-            var user = await userRepository.GetByIdAsync(id);
-            if (user == null)
+            var userViewModel = await userRepository.GetByIdAsync(id);
+            if (userViewModel == null)
             {
                 logger.LogWarning("User not found for ID: {UserId}", id);
                 return Result<AuthenticatedUser>.Failure(CommonErrors.UserNotFound);
             }
 
-            var roles = await userManager.GetRolesAsync(user);
-            var authenticatedUser = user.ToDomain(roles);
+            var roles = await userRepository.GetRolesAsync(id);
+            
+            var authenticatedUser = new AuthenticatedUser
+            {
+                Id = userViewModel.Id,
+                Email = userViewModel.Email,
+                FirstName = userViewModel.FirstName,
+                LastName = userViewModel.LastName,
+                Roles = roles.ToArray(),
+                IsActive = userViewModel.IsActive,
+                CreatedAt = userViewModel.CreatedAt
+            };
 
             return Result<AuthenticatedUser>.Success(authenticatedUser);
         }
@@ -44,15 +50,25 @@ public class UserService(
         {
             logger.LogDebug("Getting user by email: {Email}", email);
 
-            var user = await userRepository.GetByEmailAsync(email);
-            if (user == null)
+            var userViewModel = await userRepository.GetByEmailAsync(email);
+            if (userViewModel == null)
             {
                 logger.LogWarning("User not found for email: {Email}", email);
                 return Result<AuthenticatedUser>.Failure(CommonErrors.UserNotFound);
             }
 
-            var roles = await userManager.GetRolesAsync(user);
-            var authenticatedUser = user.ToDomain(roles);
+            var roles = await userRepository.GetRolesAsync(userViewModel.Id);
+            
+            var authenticatedUser = new AuthenticatedUser
+            {
+                Id = userViewModel.Id,
+                Email = userViewModel.Email,
+                FirstName = userViewModel.FirstName,
+                LastName = userViewModel.LastName,
+                Roles = roles.ToArray(),
+                IsActive = userViewModel.IsActive,
+                CreatedAt = userViewModel.CreatedAt
+            };
 
             return Result<AuthenticatedUser>.Success(authenticatedUser);
         }

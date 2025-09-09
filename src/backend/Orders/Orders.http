@@ -1,53 +1,53 @@
-@ServiceA_HostAddress = http://localhost:5001
+@Orders_HostAddress = http://localhost:5001
 
 # ===========================================
-# ServiceA Data API Endpoints
+# Orders Data API Endpoints
 # ===========================================
 
 # First, get a token from AuthServer (use AuthServer.http)
 # Then replace YOUR_ACCESS_TOKEN_HERE with the actual token
 
 ### Get Data (Service Identity Read - requires internal.servicea.read scope)
-GET {{ServiceA_HostAddress}}/data
+GET {{Orders_HostAddress}}/data
 Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
 
 ### Get Data for User (User Identity - requires data.read scope)
-GET {{ServiceA_HostAddress}}/data/user
+GET {{Orders_HostAddress}}/data/user
 Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
 
 ### Create Data (Service Identity Create - requires internal.servicea.create scope)
-POST {{ServiceA_HostAddress}}/data
+POST {{Orders_HostAddress}}/data
 Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
 Content-Type: application/json
 
 "New data item created via API"
 
 ### Update Data (Service Identity Update - requires internal.servicea.update scope)
-PUT {{ServiceA_HostAddress}}/data/1
+PUT {{Orders_HostAddress}}/data/1
 Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
 Content-Type: application/json
 
 "Updated data item"
 
 ### Delete Data (Service Identity Delete - requires internal.servicea.delete scope)
-DELETE {{ServiceA_HostAddress}}/data/1
+DELETE {{Orders_HostAddress}}/data/1
 Authorization: Bearer YOUR_SERVICE_ACCESS_TOKEN_HERE
 
 ### Get Token Information (No authorization required)
-GET {{ServiceA_HostAddress}}/data/info
+GET {{Orders_HostAddress}}/data/info
 
 # ===========================================
-# Example Token Requests for ServiceA
+# Example Token Requests for Orders
 # ===========================================
 
-# Use these in AuthServer.http to get tokens for ServiceA:
+# Use these in AuthServer.http to get tokens for Orders:
 
 ### Service Token (for CRUD operations)
 # POST http://localhost:5000/connect/token
 # Content-Type: application/x-www-form-urlencoded
 # 
 # grant_type=client_credentials
-# &client_id=ServiceA
+# &client_id=Orders
 # &client_secret=servicea-secret
 # &scope=internal.servicea.read internal.servicea.create internal.servicea.update internal.servicea.delete
 

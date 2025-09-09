@@ -31,20 +31,6 @@ public class AccountController(
         return Ok(response);
     }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
-    {
-        var command = request.ToDomain();
-        var result = await authenticationService.AuthenticateAsync(command);
-        
-        if (result.IsFailure)
-        {
-            return result.ToActionResultWithProblemDetails(HttpContext);
-        }
-
-        var response = result.Value.ToPresentation();
-        return Ok(response);
-    }
 
     [HttpPost("logout")]
     [Authorize]

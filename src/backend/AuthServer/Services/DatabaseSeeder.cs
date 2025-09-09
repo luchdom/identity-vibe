@@ -173,9 +173,7 @@ public class DatabaseSeeder(
         var requiredScopes = new[]
         {
             "openid", "profile", "email", "offline_access", 
-            // Legacy data scopes (for backward compatibility)
-            "data.read", "data.write", "data.delete",
-            // New Orders-specific scopes
+            // Orders-specific scopes
             "orders.read", "orders.write", "orders.manage",
             // Profile scopes
             "profile.read", "profile.write", 
@@ -196,10 +194,6 @@ public class DatabaseSeeder(
                         "profile" => "Profile", 
                         "email" => "Email",
                         "offline_access" => "Offline Access",
-                        // Legacy data scopes
-                        "data.read" => "Read Data",
-                        "data.write" => "Write Data",
-                        "data.delete" => "Delete Data",
                         // Orders scopes
                         "orders.read" => "Read Orders",
                         "orders.write" => "Create/Update Orders",

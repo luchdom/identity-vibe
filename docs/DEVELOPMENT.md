@@ -2,44 +2,44 @@
 
 This document covers detailed development setup, common issues, and troubleshooting steps.
 
-## Initial Setup
-
-### Prerequisites
+<prerequisites>
 - .NET 8 SDK
 - Node.js 18+ and pnpm
 - Docker and Docker Compose
 - Git
+</prerequisites>
 
-### Clone and Setup
-```bash
+<setup_instructions>
+<code_example language="bash">
 # Clone repository
 git clone <repository-url>
 cd identity
 
 # Setup backend
-dotnet restore IdentitySolution.sln
-dotnet build IdentitySolution.sln
+dotnet restore ArchZ.sln
+dotnet build ArchZ.sln
 
 # Setup frontend
 cd src/client
 pnpm install
 cd ../..
-```
+</code_example>
+</setup_instructions>
 
-### Development Environment Options
-
+<development_workflow>
+<environment_options>
 #### Option 1: Recommended for AI Development
-```bash
+<code_example language="bash">
 # Backend services in Docker
 docker-compose up --build postgres authserver gateway servicea
 
 # Frontend locally (separate terminal)
 cd src/client
 pnpm dev
-```
+</code_example>
 
 #### Option 2: Full Local Development
-```bash
+<code_example language="bash">
 # Start PostgreSQL only
 docker-compose up postgres
 
@@ -51,40 +51,40 @@ dotnet run
 cd src/backend/Gateway
 dotnet run
 
-# Terminal 3: ServiceA
-cd src/backend/ServiceA
+# Terminal 3: Orders
+cd src/backend/Orders
 dotnet run
 
 # Terminal 4: Frontend
 cd src/client
 pnpm dev
-```
+</code_example>
 
 #### Option 3: Full Docker
-```bash
+<code_example language="bash">
 # Everything in Docker
 docker-compose up --build
-```
+</code_example>
+</environment_options>
 
-## Service URLs
-
+<service_urls>
 ### Development URLs
 - **Frontend**: http://localhost:5173 (Vite dev server)
 - **Gateway**: http://localhost:5002 (BFF - Main API endpoint)
 - **AuthServer**: http://localhost:5000 (OAuth2/OIDC)
-- **ServiceA**: http://localhost:5003 (Resource API)
+- **Orders**: http://localhost:5003 (Resource API)
 - **PostgreSQL**: localhost:5432
 
 ### Docker Internal URLs (for service-to-service communication)
 - **AuthServer**: http://authserver:8080
 - **Gateway**: http://gateway:8080
-- **ServiceA**: http://servicea:8080
+- **Orders**: http://orders:8080
 - **PostgreSQL**: postgres:5432
+</service_urls>
 
-## Common Development Tasks
-
+<common_development_tasks>
 ### Database Operations
-```bash
+<code_example language="bash">
 # Reset database completely
 docker-compose down -v
 docker-compose up --build postgres authserver
@@ -98,10 +98,10 @@ dotnet ef migrations add AddNewFeature
 
 # View migration history
 dotnet ef migrations list
-```
+</code_example>
 
 ### Frontend Development
-```bash
+<code_example language="bash">
 # Install new package
 cd src/client
 pnpm add package-name
@@ -116,10 +116,10 @@ npx playwright test --ui  # E2E tests with UI
 
 # Build for production
 pnpm build
-```
+</code_example>
 
 ### Backend Development
-```bash
+<code_example language="bash">
 # Add NuGet package
 cd src/backend/AuthServer
 dotnet add package PackageName
@@ -128,41 +128,42 @@ dotnet add package PackageName
 ASPNETCORE_ENVIRONMENT=Development dotnet run
 
 # Run tests
-dotnet test IdentitySolution.sln
+dotnet test ArchZ.sln
 
 # Watch for changes
 dotnet watch run
-```
+</code_example>
+</common_development_tasks>
+</development_workflow>
 
-## Troubleshooting Guide
-
+<troubleshooting>
 ### Authentication Issues
 
 #### "401 Unauthorized" errors
 1. Check token expiration:
-```javascript
+<code_example language="javascript">
 // In browser console
 const token = localStorage.getItem('accessToken')
 console.log(JSON.parse(atob(token.split('.')[1])))
-```
+</code_example>
 
 2. Verify token refresh logic:
-```bash
+<code_example language="bash">
 # Check refresh token endpoint
 curl -X POST http://localhost:5002/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{"refreshToken":"your-refresh-token"}'
-```
+</code_example>
 
 3. Check CORS configuration:
-```bash
+<code_example language="bash">
 # Browser Network tab should show CORS headers
 Access-Control-Allow-Origin: http://localhost:5173
 Access-Control-Allow-Credentials: true
-```
+</code_example>
 
 #### Database Connection Issues
-```bash
+<code_example language="bash">
 # Test database connection
 docker-compose exec postgres psql -U postgres -d AuthServer -c "SELECT 1;"
 
@@ -172,12 +173,12 @@ docker-compose exec postgres psql -U postgres -c "\l"
 # Recreate database
 docker-compose exec postgres psql -U postgres -c "DROP DATABASE IF EXISTS \"AuthServer\";"
 docker-compose exec postgres psql -U postgres -c "CREATE DATABASE \"AuthServer\";"
-```
+</code_example>
 
 ### Docker Issues
 
 #### Port Already in Use
-```bash
+<code_example language="bash">
 # Find process using port
 lsof -i :5002
 netstat -tulpn | grep :5002
@@ -188,10 +189,10 @@ kill -9 <PID>
 # Or use different ports in docker-compose.yml
 ports:
   - "5004:8080"  # Change 5002 to 5004
-```
+</code_example>
 
 #### Container Build Failures
-```bash
+<code_example language="bash">
 # Clean Docker cache
 docker system prune -a
 docker-compose down --rmi all -v
@@ -199,22 +200,22 @@ docker-compose down --rmi all -v
 # Rebuild from scratch
 docker-compose build --no-cache
 docker-compose up --build
-```
+</code_example>
 
 #### Volume Permission Issues (Linux/macOS)
-```bash
+<code_example language="bash">
 # Fix volume permissions
 sudo chown -R $USER:$USER ./src
 
 # Or use bind mounts in docker-compose.yml
 volumes:
   - ./src/backend/AuthServer:/app:delegated
-```
+</code_example>
 
 ### Frontend Issues
 
 #### Build Failures
-```bash
+<code_example language="bash">
 # Clear node_modules and reinstall
 cd src/client
 rm -rf node_modules pnpm-lock.yaml
@@ -223,10 +224,10 @@ pnpm install
 # Clear Vite cache
 rm -rf .vite
 pnpm dev
-```
+</code_example>
 
 #### Hot Reload Not Working
-```bash
+<code_example language="typescript">
 # Check Vite config for host binding
 # vite.config.ts should have:
 export default defineConfig({
@@ -235,10 +236,10 @@ export default defineConfig({
     port: 5173
   }
 })
-```
+</code_example>
 
 #### TypeScript Errors
-```bash
+<code_example language="bash">
 # Restart TypeScript service in VS Code
 Ctrl+Shift+P -> "TypeScript: Restart TS Server"
 
@@ -247,32 +248,32 @@ Ctrl+Shift+P -> "TypeScript: Restart TS Server"
 "paths": {
   "@/*": ["./src/*"]
 }
-```
+</code_example>
 
 ### Service Communication Issues
 
 #### Services Can't Reach Each Other
 1. Check Docker network:
-```bash
+<code_example language="bash">
 docker network ls
 docker network inspect identity_default
-```
+</code_example>
 
 2. Test internal connectivity:
-```bash
+<code_example language="bash">
 # From inside gateway container
 docker-compose exec gateway curl http://authserver:8080/health
-```
+</code_example>
 
 3. Verify environment variables:
-```bash
+<code_example language="bash">
 # Check environment in running container
 docker-compose exec gateway env | grep -i auth
-```
+</code_example>
 
 #### YARP Routing Issues
 Check Gateway configuration:
-```json
+<code_example language="json">
 {
   "ReverseProxy": {
     "Routes": {
@@ -294,12 +295,12 @@ Check Gateway configuration:
     }
   }
 }
-```
+</code_example>
 
 ### Performance Issues
 
 #### Slow Database Queries
-```sql
+<code_example language="sql">
 -- Enable query logging in PostgreSQL
 ALTER SYSTEM SET log_statement = 'all';
 SELECT pg_reload_conf();
@@ -308,10 +309,10 @@ SELECT pg_reload_conf();
 SELECT query, mean_exec_time, calls 
 FROM pg_stat_statements 
 ORDER BY mean_exec_time DESC;
-```
+</code_example>
 
 #### Frontend Bundle Size
-```bash
+<code_example language="bash">
 # Analyze bundle
 cd src/client
 pnpm build
@@ -319,10 +320,10 @@ npx vite-bundle-analyzer dist
 
 # Check for large dependencies
 npx depcheck
-```
+</code_example>
+</troubleshooting>
 
-## Development Tools and Extensions
-
+<development_tools>
 ### Recommended VS Code Extensions
 - C# Dev Kit
 - TypeScript Importer
@@ -343,13 +344,13 @@ npx depcheck
 - pgAdmin (web interface)
 - DBeaver (desktop client)
 - TablePlus (macOS)
+</development_tools>
 
-## Testing and Quality Assurance
-
+<testing_guidelines>
 ### Running Tests
-```bash
+<code_example language="bash">
 # Backend tests
-dotnet test IdentitySolution.sln --verbosity normal
+dotnet test ArchZ.sln --verbosity normal
 
 # Frontend unit tests
 cd src/client
@@ -363,10 +364,10 @@ npx playwright test --ui
 
 # Specific test file
 npx playwright test tests/auth.spec.ts
-```
+</code_example>
 
 ### Code Quality
-```bash
+<code_example language="bash">
 # Format code
 cd src/client
 pnpm format
@@ -378,11 +379,11 @@ pnpm lint
 pnpm type-check
 
 # .NET format
-dotnet format IdentitySolution.sln
-```
+dotnet format ArchZ.sln
+</code_example>
 
 ### Pre-commit Hooks
-```bash
+<code_example language="bash">
 # Install husky for git hooks
 cd src/client
 pnpm add --save-dev husky lint-staged
@@ -398,10 +399,10 @@ pnpm add --save-dev husky lint-staged
     "*.{ts,tsx}": ["prettier --write", "eslint --fix"]
   }
 }
-```
+</code_example>
+</testing_guidelines>
 
-## Environment-Specific Configuration
-
+<environment_configuration>
 ### Development Environment
 - Detailed error messages
 - Hot reloading enabled
@@ -421,11 +422,11 @@ pnpm add --save-dev husky lint-staged
 - SSL certificates
 - Error logging
 - Performance monitoring
+</environment_configuration>
 
-## Debugging Tips
-
+<debugging_tips>
 ### Backend Debugging
-```bash
+<code_example language="bash">
 # Attach debugger in VS Code
 # Use launch.json configuration
 
@@ -436,10 +437,10 @@ dotnet run --verbosity detailed
 # Database debugging
 export ASPNETCORE_ENVIRONMENT=Development
 export Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command=Information
-```
+</code_example>
 
 ### Frontend Debugging
-```javascript
+<code_example language="javascript">
 // Debug API calls
 localStorage.debug = 'axios:*'
 
@@ -454,10 +455,10 @@ import { Profiler } from 'react'
 function onRender(id, phase, actualDuration) {
   console.log('Profiler', { id, phase, actualDuration })
 }
-```
+</code_example>
 
 ### Docker Debugging
-```bash
+<code_example language="bash">
 # Access container shell
 docker-compose exec gateway bash
 
@@ -469,4 +470,5 @@ docker stats
 
 # View container logs with details
 docker-compose logs --details gateway
-```
+</code_example>
+</debugging_tips>

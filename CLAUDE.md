@@ -9,7 +9,7 @@ This file provides essential guidance to Claude Code when working with this Iden
 **Backend Services:**
 - **AuthServer** (5000): OpenIddict OAuth2/OIDC server with ASP.NET Core Identity
 - **Gateway** (5002): YARP-based BFF proxy with authentication handling  
-- **ServiceA** (5003): Resource API with JWT validation and authorization
+- **Orders** (5003): Orders API with JWT validation and authorization
 
 **Frontend:**
 - **React App** (5173): TypeScript + Tailwind CSS + shadcn/ui components
@@ -19,7 +19,7 @@ This file provides essential guidance to Claude Code when working with this Iden
 ### Recommended Development Setup (AI-Friendly)
 ```bash
 # Backend services in Docker (consistent environment)
-docker-compose up --build postgres authserver gateway servicea
+docker-compose up --build postgres authserver gateway orders
 
 # Frontend locally (hot reload, easy file access)
 cd src/client && pnpm dev
@@ -706,7 +706,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 // 🔷 Connectors (Gateway only - for external service calls)
 builder.Services.AddScoped<IAuthServerConnector, AuthServerConnector>();
-builder.Services.AddScoped<IServiceAConnector, ServiceAConnector>();
+// Connectors for external service calls - removed Orders, now uses Orders service
 
 // 🔷 Infrastructure Services
 builder.Services.AddScoped<ICorrelationIdService, CorrelationIdService>();
@@ -721,8 +721,8 @@ builder.Services.AddDbContext<OrdersDbContext>(options =>
 
 ### BFF Pattern (MANDATORY)
 - **All external clients MUST access through Gateway BFF (port 5002)**
-- **Direct AuthServer/ServiceA access is PROHIBITED**
-- Gateway routes: `/auth/*` → AuthServer, `/data/*` → ServiceA
+- **Direct AuthServer/Orders access is PROHIBITED**
+- Gateway routes: `/auth/*` → AuthServer, `/orders/*` → Orders
 
 ### Service URLs
 ```bash
@@ -732,7 +732,7 @@ Gateway:  http://localhost:5002  # Main API endpoint
 
 # Internal (Docker containers)
 AuthServer: http://authserver:8080
-ServiceA:   http://servicea:8080
+Orders:   http://orders:8080
 ```
 
 ### Default Login Credentials  
@@ -750,7 +750,7 @@ The system automatically seeds two test users with different permission levels:
 - **Email**: `user@example.com`
 - **Password**: `User123!`
 - **Role**: User  
-- **Permissions**: Standard user access with `data.read`, `data.write`, `profile.read`, `profile.write` scopes
+- **Permissions**: Standard user access with `orders.read`, `orders.write`, `profile.read`, `profile.write` scopes
 
 #### Quick Test Login Dropdown
 The React frontend includes a convenient test user dropdown in development mode:
@@ -1032,7 +1032,7 @@ src/
 ├── backend/
 │   ├── AuthServer/          # OAuth2 server
 │   ├── Gateway/             # BFF proxy
-│   └── ServiceA/            # Resource API
+│   └── Orders/              # Orders API
 └── client/                  # React frontend
     ├── src/
     │   ├── components/ui/   # shadcn/ui components
@@ -1121,7 +1121,7 @@ dotnet ef migrations add MigrationName
 
 - **AuthServer/appsettings.Scopes.json**: OAuth2 clients and scopes
 - **Gateway/appsettings.json**: YARP routing configuration
-- **ServiceA/appsettings.json**: Authorization policies
+- **Orders/appsettings.json**: Authorization policies
 - **src/client/src/lib/api.ts**: Frontend API configuration
 
 ## Environment Variables

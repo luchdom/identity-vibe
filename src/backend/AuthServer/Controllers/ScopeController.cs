@@ -61,19 +61,18 @@ public class ScopeController(ScopeConfigurationService scopeConfigService) : Con
             },
             UserScopes = new[]
             {
-                "data.read",
-                "data.write", 
-                "data.delete",
+                "orders.read",
+                "orders.write", 
+                "orders.manage",
                 "profile.read",
                 "profile.write",
                 "admin.manage"
             },
             ServiceScopes = new[]
             {
-                "internal.servicea.read",
-                "internal.servicea.create",
-                "internal.servicea.update",
-                "internal.servicea.delete"
+                "internal.orders.read",
+                "internal.orders.write",
+                "internal.orders.manage"
             }
         };
 

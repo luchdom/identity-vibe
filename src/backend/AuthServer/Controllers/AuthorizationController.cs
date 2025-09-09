@@ -197,4 +197,14 @@ public class AuthorizationController(
                 [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.UnsupportedGrantType
             }));
     }
+
+    [HttpPost("~/connect/logout")]
+    public IActionResult Logout()
+    {
+        // For now, implement a simple logout that doesn't require token revocation
+        // In a production system, you might want to maintain a token blacklist
+        // or implement proper token revocation based on your security requirements
+        
+        return Ok(new { success = true, message = "Logout successful" });
+    }
 }

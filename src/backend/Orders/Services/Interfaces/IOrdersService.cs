@@ -62,5 +62,5 @@ public interface IOrdersService
     /// <summary>
     /// Calculates order totals including tax and shipping
     /// </summary>
-    Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemData> items, decimal shippingCost = 0, decimal taxRate = 0.08m);
+    Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemViewModel> items, decimal shippingCost = 0, decimal taxRate = 0.08m);
 }

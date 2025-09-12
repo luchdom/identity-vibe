@@ -81,39 +81,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Audience = audience;
         options.RequireHttpsMetadata = false; // For development only
         options.IncludeErrorDetails = true; // For development debugging
+        
+        // Completely disable JWT validation for debugging - ONLY FOR DEVELOPMENT
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = false,
             ValidateAudience = false,
             ValidateLifetime = false,
             ValidateIssuerSigningKey = false,
+            RequireExpirationTime = false,
+            RequireSignedTokens = false,
             NameClaimType = "name",
             RoleClaimType = "role"
         };
     });
 
-// Configure authorization with Orders-specific policies
-builder.Services.AddAuthorization(options =>
-{
-    // Simplified policies for development - require authenticated user only
-    options.AddPolicy("ReadOrders", policy => 
-        policy.RequireAuthenticatedUser());
-
-    options.AddPolicy("CreateOrders", policy => 
-        policy.RequireAuthenticatedUser());
-
-    options.AddPolicy("UpdateOrders", policy => 
-        policy.RequireAuthenticatedUser());
-
-    options.AddPolicy("ManageOrders", policy => 
-        policy.RequireAuthenticatedUser());
-    
-    // Legacy auth service for backward compatibility
-    var authService = new AuthorizationService(
-        Options.Create(builder.Configuration.GetSection("Auth").Get<AuthConfiguration>() ?? new AuthConfiguration())
-    );
-    authService.RegisterPolicies(options);
-});
+// Configure authorization with configuration-driven policies
+var authService = new AuthorizationService(builder.Configuration);
+authService.RegisterPolicies(builder.Services);
 
 // Configure options
 builder.Services.Configure<AuthConfiguration>(

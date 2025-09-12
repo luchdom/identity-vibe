@@ -1,10 +1,24 @@
 @Gateway_HostAddress = http://localhost:5002
 
 # ===========================================
-# Gateway BFF Authentication Endpoints
+# Gateway BFF Authentication Endpoints  
 # ===========================================
 
-### Login via Gateway BFF
+### Health Check - WORKING ✅
+GET {{Gateway_HostAddress}}/health
+
+### Login via Gateway BFF (NEEDS IMPLEMENTATION)
+# NOTE: Gateway currently doesn't have /auth/login endpoint
+# Use AuthServer directly for now: http://localhost:5000/connect/token
+POST {{Gateway_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "User123!"
+}
+
+### Login via Gateway BFF (Admin)
 POST {{Gateway_HostAddress}}/auth/login
 Content-Type: application/json
 
@@ -13,19 +27,11 @@ Content-Type: application/json
   "password": "Admin123!"
 }
 
-### Refresh Token via Gateway BFF
-POST {{Gateway_HostAddress}}/auth/refresh
-Content-Type: application/json
-
-{
-  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
-}
-
 ### Get Current User Info (Requires Authentication)
 GET {{Gateway_HostAddress}}/auth/user
 Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
 
-### Logout via Gateway BFF
+### Logout via Gateway BFF  
 POST {{Gateway_HostAddress}}/auth/logout
 Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
 
@@ -56,29 +62,47 @@ Content-Type: application/json
 GET {{Gateway_HostAddress}}/account/profile
 Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
 
-# Orders Service endpoints proxied through /orders/* path
-### Get Orders via Gateway (proxied to Orders Service - requires orders.read scope)
-GET {{Gateway_HostAddress}}/orders
-Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+# Orders Service endpoints - Use AuthServer directly for tokens
+# NOTE: Gateway routing to Orders needs to be configured
+### Direct Orders API (WORKING) ✅
+# Use http://localhost:5003/orders directly
+# Get token from: http://localhost:5000/connect/token
 
-### Create Order via Gateway (proxied to Orders Service - requires orders.write scope)
-POST {{Gateway_HostAddress}}/orders
-Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+### Create Order via Orders Service (WORKING) ✅  
+POST http://localhost:5003/orders
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjJENTQ5OThGNzQwMDA0QUNENkE1RUJCODMxMzI0NjczRDRCMkI3REMiLCJ4NXQiOiJMVlNaajNRQUJLeldwZXU0TVRKR2M5U3l0OXciLCJ0eXAiOiJhdCtqd3QifQ.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAvIiwiZXhwIjoxNzU3NjA2ODQ5LCJpYXQiOjE3NTc2MDMyNDksInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb3JkZXJzLnJlYWQgb3JkZXJzLndyaXRlIHByb2ZpbGUucmVhZCBwcm9maWxlLndyaXRlIiwianRpIjoiYzA1ZTQyNGEtODVmMi00MTIzLTk5MjctODkwZWQ1ZTNhNDc1Iiwic3ViIjoiMTI0NTA1NGEtY2YxMi00OTg3LTk1OTktYTNhN2YxNTQ1YzA4IiwibmFtZSI6IkphbmUgVXNlciIsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSIsImdpdmVuX25hbWUiOiJKYW5lIiwiZmFtaWx5X25hbWUiOiJVc2VyIiwib2lfcHJzdCI6ImdhdGV3YXktYmZmIiwiY2xpZW50X2lkIjoiZ2F0ZXdheS1iZmYiLCJvaV90a25faWQiOiI3NTRmOGQ1Ni03YWVjLTQ3ZjgtYTY2Yi05NjhkMmJlMjFjOWYifQ.jntzPbZ6L3gMmDAmFzmT-D66UIVtRT9AfQjZ0hQhTp-Qjpqtsya08rQ9Gqn7MPsMKXUhMnXg7uQLPhFFj3lfSoLKMJJjWZdH1hFmU3IX0BilmxQC9twbQNcUqObuu84O2Pol3YT3ktF7gyVmLykFFxWvlpvsxbMKGNpDjgcI084TVRZ1XTYJIm-RscXwFzHOLRUKKgGlM6bdZV_JOvi193c2RMwWKU824GoZQIsik6UNboC2VmdVWCyvbKEItieAlVlkRhUE_Mrh1NXjauyl5HAh4tX7cManaQpBM9bsqKO8BFILJVA6zotIlL0PhGSDRlRYzQz1yr59qRUKAHQ0Og
 Content-Type: application/json
-Idempotency-Key: order-{{$randomUuid}}
 
 {
-  "customerFirstName": "John",
-  "customerLastName": "Doe",
-  "customerEmail": "john.doe@example.com",
-  "customerPhone": "+1-555-0123",
-  "shippingAddress": "123 Main St",
-  "shippingCity": "New York",
-  "shippingState": "NY",
-  "shippingPostalCode": "10001",
-  "shippingCountry": "USA",
-  "specialInstructions": "Leave at door",
-  "orderItems": [
+  "customer": {
+    "firstName": "Jane",
+    "lastName": "User", 
+    "email": "user@example.com"
+  },
+  "items": [
+    {
+      "productSku": "TEST-001",
+      "productName": "Test Product",
+      "quantity": 2,
+      "unitPrice": 10.99
+    }
+  ]
+}
+
+### Create Order via Gateway (NEEDS CONFIGURATION)
+# NOTE: Gateway routing to /data/* for Orders needs YARP config
+POST {{Gateway_HostAddress}}/data/orders
+Authorization: Bearer YOUR_USER_ACCESS_TOKEN_HERE
+Content-Type: application/json
+
+{
+  "customer": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1-555-0123"
+  },
+  "items": [
     {
       "productSku": "LAPTOP-001",
       "productName": "Gaming Laptop Pro",
@@ -87,7 +111,8 @@ Idempotency-Key: order-{{$randomUuid}}
       "quantity": 1,
       "unitPrice": 1299.99
     }
-  ]
+  ],
+  "specialInstructions": "Leave at door"
 }
 
 ### Get Order by ID via Gateway (proxied to Orders Service - requires orders.read scope)

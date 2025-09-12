@@ -5,6 +5,6 @@ namespace AuthServer.Services.Interfaces;
 
 public interface IUserService
 {
-    Task<Result<AuthenticatedUser>> GetUserByIdAsync(string userId);
-    Task<Result<AuthenticatedUser>> GetUserByEmailAsync(string email);
+    Task<Result<AuthenticatedUserViewModel>> GetUserByIdAsync(string userId);
+    Task<Result<AuthenticatedUserViewModel>> GetUserByEmailAsync(string email);
 }

@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Orders.Entities;
+using Orders.Data.Entities;
 using Orders.Models.Enums;
 
 namespace Orders.Data;

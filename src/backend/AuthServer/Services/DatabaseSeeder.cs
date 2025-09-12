@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using AuthServer.Data;
+using AuthServer.Data.Entities;
 using OpenIddict.Abstractions;
 using Microsoft.Extensions.Options;
 using AuthServer.Configuration;

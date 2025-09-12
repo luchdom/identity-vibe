@@ -1,5 +1,5 @@
-using Orders.Entities;
-using Orders.Entities.Mappers;
+using Orders.Data.Entities;
+using Orders.Data.Entities.Mappers;
 using Orders.Models.Commands;
 using Orders.Models.Enums;
 using Orders.Models.Mappers;
@@ -111,7 +111,7 @@ public class OrdersService(
         var (orders, totalCount) = repositoryResult.Value;
         var totalPages = (int)Math.Ceiling((double)totalCount / query.PageSize);
         
-        var paginationData = new PaginationData
+        var paginationData = new PaginationViewModel
         {
             TotalCount = totalCount,
             PageNumber = query.Page,
@@ -137,7 +137,7 @@ public class OrdersService(
         var (orders, totalCount) = repositoryResult.Value;
         var totalPages = (int)Math.Ceiling((double)totalCount / query.PageSize);
         
-        var paginationData = new PaginationData
+        var paginationData = new PaginationViewModel
         {
             TotalCount = totalCount,
             PageNumber = query.Page,
@@ -270,7 +270,7 @@ public class OrdersService(
         return await ordersRepository.CanModifyOrderAsync(orderId, userId);
     }
 
-    public async Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemData> items, decimal shippingCost = 0, decimal taxRate = DefaultTaxRate)
+    public async Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemViewModel> items, decimal shippingCost = 0, decimal taxRate = DefaultTaxRate)
     {
         try
         {

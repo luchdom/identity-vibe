@@ -6,6 +6,6 @@ namespace AuthServer.Services.Interfaces;
 
 public interface IAuthenticationService
 {
-    Task<Result<RegistrationData>> RegisterAsync(RegisterUserCommand command);
+    Task<Result<RegistrationDataViewModel>> RegisterAsync(RegisterUserCommand command);
     Task<Result> LogoutAsync(string userId);
 }

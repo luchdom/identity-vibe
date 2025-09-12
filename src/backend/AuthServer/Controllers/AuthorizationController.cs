@@ -6,7 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using System.Security.Claims;
-using AuthServer.Data;
+using AuthServer.Data.Entities;
 using AuthServer.Services;
 
 namespace AuthServer.Controllers;
@@ -122,6 +122,7 @@ public class AuthorizationController(
             // Filter requested scopes against user's allowed scopes
             var requestedScopes = request.GetScopes();
             var validScopes = requestedScopes.Where(scope => userScopes.Contains(scope)).ToArray();
+
 
             // Set the list of scopes granted to the client application
             identity.SetScopes(validScopes);

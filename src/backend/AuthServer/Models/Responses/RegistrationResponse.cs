@@ -6,6 +6,6 @@ public record RegistrationResponse
 {
     public required bool Success { get; init; }
     public required string Message { get; init; }
-    public AuthenticatedUser? User { get; init; }
+    public AuthenticatedUserViewModel? User { get; init; }
     public List<string> Errors { get; init; } = [];
 }

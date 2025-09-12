@@ -1,4 +1,4 @@
-using Orders.Entities;
+using Orders.Data.Entities;
 using Orders.Models.Requests;
 using Orders.Models.Responses;
 using Orders.Models.Enums;

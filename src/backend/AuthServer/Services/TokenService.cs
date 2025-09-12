@@ -12,7 +12,7 @@ public class TokenService(
     IConfiguration configuration,
     ILogger<TokenService> logger) : ITokenService
 {
-    public async Task<Result<string>> GenerateAccessTokenAsync(AuthenticatedUser user, string[] scopes)
+    public async Task<Result<string>> GenerateAccessTokenAsync(AuthenticatedUserViewModel user, string[] scopes)
     {
         try
         {

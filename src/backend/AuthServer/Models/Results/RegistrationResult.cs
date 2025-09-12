@@ -8,15 +8,15 @@ namespace AuthServer.Models.Results;
 /// </summary>
 public static class RegistrationResult
 {
-    public static Result<RegistrationData> Success(AuthenticatedUser user) =>
-        Result<RegistrationData>.Success(new RegistrationData { User = user });
+    public static Result<RegistrationDataViewModel> Success(AuthenticatedUserViewModel user) =>
+        Result<RegistrationDataViewModel>.Success(new RegistrationDataViewModel { User = user });
 
-    public static Result<RegistrationData> UserAlreadyExists() =>
-        Result<RegistrationData>.Failure(CommonErrors.UserAlreadyExists);
+    public static Result<RegistrationDataViewModel> UserAlreadyExists() =>
+        Result<RegistrationDataViewModel>.Failure(CommonErrors.UserAlreadyExists);
 
-    public static Result<RegistrationData> ValidationFailed(string[] errors) =>
-        Result<RegistrationData>.Failure("VALIDATION_FAILED", string.Join(", ", errors));
+    public static Result<RegistrationDataViewModel> ValidationFailed(string[] errors) =>
+        Result<RegistrationDataViewModel>.Failure("VALIDATION_FAILED", string.Join(", ", errors));
 
-    public static Result<RegistrationData> Failure(string code, string message) =>
-        Result<RegistrationData>.Failure(new Error(code, message));
+    public static Result<RegistrationDataViewModel> Failure(string code, string message) =>
+        Result<RegistrationDataViewModel>.Failure(new Error(code, message));
 }

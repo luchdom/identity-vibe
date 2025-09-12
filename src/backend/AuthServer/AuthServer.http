@@ -4,25 +4,36 @@
 # OAuth2/OpenID Connect Token Endpoints
 # ===========================================
 
-### Get Access Token using Password Flow (Web Client)
+### Get Access Token using Password Flow (Gateway BFF) - WORKING
 POST {{AuthServer_HostAddress}}/connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=password
-&client_id=web-client
-&client_secret=secret
+&client_id=gateway-bff
+&client_secret=gateway-secret
+&username=user@example.com
+&password=User123!
+&scope=openid profile email orders.read orders.write profile.read profile.write
+
+### Get Access Token using Password Flow (Admin User) - WORKING
+POST {{AuthServer_HostAddress}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password
+&client_id=gateway-bff
+&client_secret=gateway-secret
 &username=admin@example.com
 &password=Admin123!
-&scope=openid profile email data.read data.write profile.read profile.write
+&scope=openid profile email orders.read orders.write orders.manage profile.read profile.write admin.manage admin.users admin.roles
 
-### Get Access Token using Client Credentials Flow (Orders)
+### Get Access Token using Client Credentials Flow (Orders Service) - WORKING
 POST {{AuthServer_HostAddress}}/connect/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=client_credentials
 &client_id=Orders
-&client_secret=servicea-secret
-&scope=internal.servicea.read internal.servicea.create internal.servicea.update internal.servicea.delete
+&client_secret=orders-secret
+&scope=internal.orders.read internal.orders.write internal.orders.manage
 
 ### Refresh Token
 POST {{AuthServer_HostAddress}}/connect/token

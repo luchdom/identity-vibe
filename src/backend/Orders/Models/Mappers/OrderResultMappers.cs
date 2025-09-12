@@ -31,7 +31,7 @@ public static class OrderResultMappers
     }
     
     // Core ViewModel → Response mapping
-    public static OrderResponse ToResponse(this OrderData order)
+    public static OrderResponse ToResponse(this OrderViewModel order)
     {
         return new OrderResponse
         {
@@ -77,7 +77,7 @@ public static class OrderResultMappers
         };
     }
     
-    public static OrderSummaryResponse ToSummaryResponse(this OrderData order)
+    public static OrderSummaryResponse ToSummaryResponse(this OrderViewModel order)
     {
         return new OrderSummaryResponse
         {
@@ -103,7 +103,7 @@ public static class OrderResultMappers
     }
     
     // ViewModel → Response extension methods
-    public static CustomerResponse ToResponse(this CustomerData customer) => new()
+    public static CustomerResponse ToResponse(this CustomerViewModel customer) => new()
     {
         Id = customer.Id,
         FirstName = customer.FirstName,
@@ -119,7 +119,7 @@ public static class OrderResultMappers
         FullAddress = $"{customer.Address}, {customer.City}, {customer.State} {customer.PostalCode}, {customer.Country}".Replace(", , ", ", ").Trim()
     };
     
-    public static OrderItemResponse ToResponse(this OrderItemData item) => new()
+    public static OrderItemResponse ToResponse(this OrderItemViewModel item) => new()
     {
         Id = item.Id,
         ProductSku = item.ProductSku,
@@ -137,7 +137,7 @@ public static class OrderResultMappers
         AdditionalAttributes = item.AdditionalAttributes
     };
     
-    private static string GetDisplayName(OrderItemData item)
+    private static string GetDisplayName(OrderItemViewModel item)
     {
         var displayName = item.ProductName;
         
@@ -152,7 +152,7 @@ public static class OrderResultMappers
         return displayName;
     }
     
-    public static ShippingResponse ToResponse(this ShippingData shipping) => new()
+    public static ShippingResponse ToResponse(this ShippingViewModel shipping) => new()
     {
         Address = shipping.Address,
         City = shipping.City,
@@ -165,7 +165,7 @@ public static class OrderResultMappers
         Notes = shipping.Notes
     };
     
-    public static OrderStatusHistoryResponse ToResponse(this OrderStatusHistoryData history) => new()
+    public static OrderStatusHistoryResponse ToResponse(this OrderStatusHistoryViewModel history) => new()
     {
         Id = history.Id,
         FromStatus = history.FromStatus,
@@ -178,7 +178,7 @@ public static class OrderResultMappers
         CreatedAt = history.CreatedAt
     };
     
-    public static OrderStatusResponse ToResponse(this OrderStatusData statusData) => new()
+    public static OrderStatusResponse ToResponse(this OrderStatusViewModel statusData) => new()
     {
         OrderId = statusData.OrderId,
         OrderNumber = statusData.OrderNumber,

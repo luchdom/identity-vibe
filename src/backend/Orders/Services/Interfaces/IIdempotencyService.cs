@@ -1,4 +1,4 @@
-using Orders.Entities;
+using Orders.Data.Entities;
 using Shared.Common;
 
 namespace Orders.Services.Interfaces;

@@ -6,7 +6,7 @@ namespace Orders.Models.Mappers;
 public static class OrderCommandMappers
 {
     // Command → Domain mapping (used by Service layer)
-    public static CustomerData ToDomain(this CustomerCommand command) => new()
+    public static CustomerViewModel ToDomain(this CustomerCommand command) => new()
     {
         Id = 0, // Will be set by repository
         FirstName = command.FirstName,
@@ -22,7 +22,7 @@ public static class OrderCommandMappers
         UpdatedAt = DateTime.UtcNow
     };
 
-    public static ShippingData ToDomain(this ShippingCommand command) => new()
+    public static ShippingViewModel ToDomain(this ShippingCommand command) => new()
     {
         Address = command.Address,
         City = command.City,
@@ -34,7 +34,7 @@ public static class OrderCommandMappers
         Notes = command.Notes
     };
 
-    public static OrderItemData ToDomain(this OrderItemCommand command) => new()
+    public static OrderItemViewModel ToDomain(this OrderItemCommand command) => new()
     {
         Id = 0, // Will be set by repository
         ProductSku = command.ProductSku,

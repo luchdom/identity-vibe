@@ -9,7 +9,7 @@ public class UserService(
     IUserRepository userRepository,
     ILogger<UserService> logger) : IUserService
 {
-    public async Task<Result<AuthenticatedUser>> GetUserByIdAsync(string id)
+    public async Task<Result<AuthenticatedUserViewModel>> GetUserByIdAsync(string id)
     {
         try
         {
@@ -19,12 +19,12 @@ public class UserService(
             if (userViewModel == null)
             {
                 logger.LogWarning("User not found for ID: {UserId}", id);
-                return Result<AuthenticatedUser>.Failure(CommonErrors.UserNotFound);
+                return Result<AuthenticatedUserViewModel>.Failure(CommonErrors.UserNotFound);
             }
 
             var roles = await userRepository.GetRolesAsync(id);
             
-            var authenticatedUser = new AuthenticatedUser
+            var authenticatedUser = new AuthenticatedUserViewModel
             {
                 Id = userViewModel.Id,
                 Email = userViewModel.Email,
@@ -35,16 +35,16 @@ public class UserService(
                 CreatedAt = userViewModel.CreatedAt
             };
 
-            return Result<AuthenticatedUser>.Success(authenticatedUser);
+            return Result<AuthenticatedUserViewModel>.Success(authenticatedUser);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error getting user by ID: {UserId}", id);
-            return Result<AuthenticatedUser>.Failure("USER_RETRIEVAL_ERROR", "An error occurred while retrieving the user");
+            return Result<AuthenticatedUserViewModel>.Failure("USER_RETRIEVAL_ERROR", "An error occurred while retrieving the user");
         }
     }
 
-    public async Task<Result<AuthenticatedUser>> GetUserByEmailAsync(string email)
+    public async Task<Result<AuthenticatedUserViewModel>> GetUserByEmailAsync(string email)
     {
         try
         {
@@ -54,12 +54,12 @@ public class UserService(
             if (userViewModel == null)
             {
                 logger.LogWarning("User not found for email: {Email}", email);
-                return Result<AuthenticatedUser>.Failure(CommonErrors.UserNotFound);
+                return Result<AuthenticatedUserViewModel>.Failure(CommonErrors.UserNotFound);
             }
 
             var roles = await userRepository.GetRolesAsync(userViewModel.Id);
             
-            var authenticatedUser = new AuthenticatedUser
+            var authenticatedUser = new AuthenticatedUserViewModel
             {
                 Id = userViewModel.Id,
                 Email = userViewModel.Email,
@@ -70,12 +70,12 @@ public class UserService(
                 CreatedAt = userViewModel.CreatedAt
             };
 
-            return Result<AuthenticatedUser>.Success(authenticatedUser);
+            return Result<AuthenticatedUserViewModel>.Success(authenticatedUser);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error getting user by email: {Email}", email);
-            return Result<AuthenticatedUser>.Failure("USER_RETRIEVAL_ERROR", "An error occurred while retrieving the user");
+            return Result<AuthenticatedUserViewModel>.Failure("USER_RETRIEVAL_ERROR", "An error occurred while retrieving the user");
         }
     }
 }

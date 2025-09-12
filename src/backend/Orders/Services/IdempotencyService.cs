@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Orders.Data;
-using Orders.Entities;
+using Orders.Data.Entities;
 using Orders.Services.Interfaces;
 using Shared.Common;
 using System.Text.RegularExpressions;

@@ -5,7 +5,7 @@ namespace AuthServer.Models.Mappers;
 
 public static class RegistrationDataMapper
 {
-    public static RegistrationResponse ToPresentation(this RegistrationData data)
+    public static RegistrationResponse ToPresentation(this RegistrationDataViewModel data)
     {
         return new RegistrationResponse
         {

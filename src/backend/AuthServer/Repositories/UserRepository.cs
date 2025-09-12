@@ -1,5 +1,5 @@
-using AuthServer.Data;
-using AuthServer.Entities.Mappers;
+using AuthServer.Data.Entities;
+using AuthServer.Data.Entities.Mappers;
 using AuthServer.Models.ViewModels;
 using AuthServer.Repositories.Interfaces;
 using Microsoft.AspNetCore.Identity;

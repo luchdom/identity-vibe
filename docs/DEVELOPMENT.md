@@ -248,6 +248,67 @@ Ctrl+Shift+P -> "TypeScript: Restart TS Server"
 "paths": {
   "@/*": ["./src/*"]
 }
+
+# Check for missing dependencies
+pnpm install
+
+# Type check without emitting files
+npx tsc --noEmit
+
+# Clear TypeScript cache
+rm -rf node_modules/.cache/.tsbuildinfo
+</code_example>
+
+#### Clean Architecture Issues
+
+##### Namespace/Import Errors After Restructuring
+<code_example language="bash">
+# After moving entities to Data/Entities/, update all references
+find src/backend/ServiceName -name "*.cs" -exec sed -i 's/using ServiceName\.Entities;/using ServiceName.Data.Entities;/g' {} +
+
+# Build to identify remaining issues
+cd src/backend/ServiceName
+dotnet build
+
+# Common fixes for mapper references
+# Update: using ServiceName.Entities.Mappers;
+# To:    using ServiceName.Data.Entities.Mappers;
+</code_example>
+
+##### EF Core Configuration Errors
+<code_example language="bash">
+# If ApplyConfigurationsFromAssembly doesn't find configurations
+# Check namespace matches assembly:
+# Configurations should be in: ServiceName.Data.Configurations
+# DbContext should be in: ServiceName.Data
+
+# Test configuration loading
+cd src/backend/ServiceName
+dotnet ef dbcontext info --verbose
+
+# Generate new migration to verify config
+dotnet ef migrations add TestConfiguration
+</code_example>
+
+##### Clean Architecture Violations
+<code_example language="csharp">
+// ❌ Controller directly using Entity (WRONG)
+public IActionResult Create(OrderEntity entity) // BAD
+
+// ✅ Controller using Request/Response models (CORRECT)  
+public IActionResult Create(CreateOrderRequest request) // GOOD
+
+// ❌ Service directly using Request model (WRONG)
+public Task<Result> CreateOrder(CreateOrderRequest request) // BAD
+
+// ✅ Service using Command model (CORRECT)
+public Task<Result> CreateOrder(CreateOrderCommand command) // GOOD
+
+// ❌ Repository exposing Entity (WRONG)
+public Task<OrderEntity> GetById(int id) // BAD
+
+// ✅ Repository using ViewModel (CORRECT)
+public Task<OrderViewModel> GetById(int id) // GOOD
 </code_example>
 
 ### Service Communication Issues
@@ -295,6 +356,78 @@ Check Gateway configuration:
     }
   }
 }
+</code_example>
+
+#### JWT and Authentication Debugging
+<code_example language="bash">
+# Debug JWT token contents
+TOKEN="your-jwt-here"
+echo $TOKEN | cut -d. -f2 | base64 -d | jq .
+
+# Test token validation manually
+curl -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:5002/auth/user
+
+# Check token expiration
+node -e "
+const token = 'your-jwt-here';
+const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64'));
+console.log('Expires:', new Date(payload.exp * 1000));
+console.log('Current:', new Date());
+"
+
+# Verify OAuth2 scopes
+curl -X POST http://localhost:5000/connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=gateway-bff&client_secret=gateway-secret&scope=orders.read"
+</code_example>
+
+#### Service Startup and Health Issues  
+<code_example language="bash">
+# Check all services are running
+docker-compose ps
+
+# View logs for failed services
+docker-compose logs authserver --tail 50
+docker-compose logs gateway --tail 50  
+docker-compose logs orders --tail 50
+
+# Test health endpoints
+curl http://localhost:5000/health  # AuthServer
+curl http://localhost:5002/health  # Gateway
+curl http://localhost:5003/health  # Orders
+
+# Check database connection from services
+docker-compose exec authserver curl http://localhost:8080/health
+docker-compose exec postgres pg_isready -U postgres
+
+# Verify environment configuration
+docker-compose exec gateway env | grep -E "(AUTH|DATABASE|CORS)"
+</code_example>
+
+#### Clean Architecture Data Flow Issues
+<code_example language="bash">
+# Debug mapping issues
+# 1. Check if mappers are being called correctly
+# Add logging to mapper classes:
+
+# 2. Verify layer separation
+# Controllers should only use Requests/Responses
+# Services should only use Commands/Queries/Results/ViewModels  
+# Repositories should only use ViewModels internally
+
+# 3. Common mapping errors to check:
+# - Missing mapper method
+# - Wrong direction (Entity->Domain vs Domain->Entity)
+# - Null reference in nested mappings
+# - Incorrect property mapping
+
+# Test individual layers:
+cd src/backend/ServiceName.Tests
+dotnet test --filter "MapperTests"
+dotnet test --filter "RepositoryTests" 
+dotnet test --filter "ServiceTests"
 </code_example>
 
 ### Performance Issues
@@ -348,22 +481,107 @@ npx depcheck
 
 <testing_guidelines>
 ### Running Tests
+
+#### Backend Testing
 <code_example language="bash">
-# Backend tests
+# Run all backend tests
 dotnet test ArchZ.sln --verbosity normal
 
-# Frontend unit tests
+# Run tests with coverage
+dotnet test --collect:"XPlat Code Coverage"
+
+# Run specific test project
+cd src/backend/AuthServer.Tests
+dotnet test --verbosity detailed
+
+# Run tests matching pattern
+dotnet test --filter "FullyQualifiedName~AuthenticationService"
+
+# Watch mode for continuous testing
+dotnet watch test
+</code_example>
+
+#### Frontend Testing
+<code_example language="bash">
+# Unit tests with Jest/Vitest
 cd src/client
 pnpm test
 
-# E2E tests
-npx playwright test
+# Unit tests in watch mode
+pnpm test:watch
 
-# E2E tests with UI (for debugging)
-npx playwright test --ui
+# Coverage report
+pnpm test:coverage
+
+# Component testing with React Testing Library
+pnpm test -- --testPathPattern=components
 
 # Specific test file
-npx playwright test tests/auth.spec.ts
+pnpm test -- UserAuthForm.test.tsx
+</code_example>
+
+#### End-to-End Testing with Playwright
+<code_example language="bash">
+# Run all E2E tests
+npx playwright test
+
+# Run tests in headed mode (see browser)
+npx playwright test --headed
+
+# Debug tests with UI
+npx playwright test --ui
+
+# Run specific test file
+npx playwright test tests/auth-flow.spec.ts
+
+# Run tests in specific browser
+npx playwright test --project=chromium
+
+# Generate test reports
+npx playwright show-report
+
+# Update test screenshots (visual regression)
+npx playwright test --update-snapshots
+</code_example>
+
+#### Integration Testing
+<code_example language="bash">
+# Test complete auth flow with curl
+curl -X POST http://localhost:5002/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"Admin123!"}'
+
+# Test JWT validation across services
+TOKEN="your-jwt-token"
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:5002/orders/data
+
+# Test service-to-service communication
+docker-compose exec gateway curl http://authserver:8080/health
+docker-compose exec gateway curl http://orders:8080/health
+
+# Load testing with Apache Bench (if installed)
+ab -n 100 -c 10 http://localhost:5002/auth/user
+</code_example>
+
+#### Database Testing
+<code_example language="bash">
+# Reset test database for consistent testing
+docker-compose down -v
+docker-compose up --build postgres authserver
+
+# Run migrations in test environment
+cd src/backend/AuthServer
+ASPNETCORE_ENVIRONMENT=Test dotnet ef database update
+
+# Seed test data
+cd src/backend/AuthServer
+dotnet run --environment=Test --seed-data
+
+# Test database queries directly
+docker-compose exec postgres psql -U postgres -d AuthServer -c "
+SELECT COUNT(*) FROM \"AspNetUsers\" WHERE \"Email\" = 'admin@example.com';
+"
 </code_example>
 
 ### Code Quality

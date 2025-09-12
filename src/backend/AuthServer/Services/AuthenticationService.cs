@@ -11,7 +11,7 @@ public class AuthenticationService(
     ILogger<AuthenticationService> logger) : IAuthenticationService
 {
 
-    public async Task<Result<RegistrationData>> RegisterAsync(RegisterUserCommand command)
+    public async Task<Result<RegistrationDataViewModel>> RegisterAsync(RegisterUserCommand command)
     {
         try
         {
@@ -20,12 +20,12 @@ public class AuthenticationService(
             if (await userRepository.ExistsAsync(command.Email))
             {
                 logger.LogWarning("Registration failed: User already exists for {Email}", command.Email);
-                return Result<RegistrationData>.Failure(CommonErrors.UserAlreadyExists);
+                return Result<RegistrationDataViewModel>.Failure(CommonErrors.UserAlreadyExists);
             }
 
             if (command.Password != command.ConfirmPassword)
             {
-                return Result<RegistrationData>.Failure("PASSWORD_MISMATCH", "Passwords do not match");
+                return Result<RegistrationDataViewModel>.Failure("PASSWORD_MISMATCH", "Passwords do not match");
             }
 
             var newUserViewModel = new UserViewModel
@@ -51,7 +51,7 @@ public class AuthenticationService(
             
             await userRepository.AddToRoleAsync(createdUser.Id, "User");
 
-            var authenticatedUser = new AuthenticatedUser
+            var authenticatedUser = new AuthenticatedUserViewModel
             {
                 Id = createdUser.Id,
                 Email = createdUser.Email,
@@ -62,18 +62,18 @@ public class AuthenticationService(
                 CreatedAt = createdUser.CreatedAt
             };
             
-            var registrationData = new RegistrationData
+            var registrationData = new RegistrationDataViewModel
             {
                 User = authenticatedUser
             };
 
             logger.LogInformation("Registration successful for {Email}", command.Email);
-            return Result<RegistrationData>.Success(registrationData);
+            return Result<RegistrationDataViewModel>.Success(registrationData);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Registration error for {Email}", command.Email);
-            return Result<RegistrationData>.Failure("REGISTRATION_ERROR", "An error occurred during registration");
+            return Result<RegistrationDataViewModel>.Failure("REGISTRATION_ERROR", "An error occurred during registration");
         }
     }
 

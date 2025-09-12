@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using AuthServer.Configuration;
 using Microsoft.AspNetCore.Identity;
-using AuthServer.Data;
+using AuthServer.Data.Entities;
 
 namespace AuthServer.Services;
 
@@ -11,12 +11,12 @@ public class ScopeConfigurationService(
 {
     private readonly ScopeConfiguration _scopeConfig = scopeConfig.Value;
 
-    public string[] GetUserScopes(AppUser user)
+    public async Task<string[]> GetUserScopesAsync(AppUser user)
     {
         var scopes = new List<string>(_scopeConfig.UserScopes.DefaultScopes);
 
         // Get user roles and add role-specific scopes
-        var userRoles = userManager.GetRolesAsync(user).Result;
+        var userRoles = await userManager.GetRolesAsync(user);
         foreach (var role in userRoles)
         {
             if (_scopeConfig.UserScopes.RoleScopes.ContainsKey(role))
@@ -26,6 +26,12 @@ public class ScopeConfigurationService(
         }
 
         return scopes.Distinct().ToArray();
+    }
+
+    // Keep synchronous version for backward compatibility but make it safer
+    public string[] GetUserScopes(AppUser user)
+    {
+        return GetUserScopesAsync(user).GetAwaiter().GetResult();
     }
 
     public string[] GetClientScopes(string clientId)

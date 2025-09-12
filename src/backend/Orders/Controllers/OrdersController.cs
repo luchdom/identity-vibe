@@ -22,7 +22,7 @@ public class OrdersController(
     /// Creates a new order (idempotent)
     /// </summary>
     [HttpPost]
-    [Authorize(Policy = "CreateOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -64,7 +64,7 @@ public class OrdersController(
     /// Gets orders for the current user with pagination
     /// </summary>
     [HttpGet]
-    [Authorize(Policy = "ReadOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> GetOrders(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -94,7 +94,7 @@ public class OrdersController(
     /// Gets all orders (admin only) with pagination
     /// </summary>
     [HttpGet("all")]
-    [Authorize(Policy = "ManageOrders")]
+    [Authorize(Policy = "ServiceIdentityDelete")]
     public async Task<IActionResult> GetAllOrders(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -119,7 +119,7 @@ public class OrdersController(
     /// Gets a specific order by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    [Authorize(Policy = "ReadOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> GetOrderById(int id)
     {
         var userId = HttpContext.GetUserId();
@@ -144,7 +144,7 @@ public class OrdersController(
     /// Updates an existing order (idempotent)
     /// </summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = "UpdateOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> UpdateOrder(int id, [FromBody] UpdateOrderRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -186,7 +186,7 @@ public class OrdersController(
     /// Cancels an order (idempotent)
     /// </summary>
     [HttpPost("{id:int}/cancel")]
-    [Authorize(Policy = "UpdateOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderRequest? request = null)
     {
         var userId = HttpContext.GetUserId();
@@ -229,7 +229,7 @@ public class OrdersController(
     /// Gets order status and history
     /// </summary>
     [HttpGet("{id:int}/status")]
-    [Authorize(Policy = "ReadOrders")]
+    [Authorize(Policy = "UserIdentity")]
     public async Task<IActionResult> GetOrderStatus(int id)
     {
         var userId = HttpContext.GetUserId();
@@ -254,7 +254,7 @@ public class OrdersController(
     /// Updates order status (admin only)
     /// </summary>
     [HttpPost("{id:int}/status")]
-    [Authorize(Policy = "ManageOrders")]
+    [Authorize(Policy = "ServiceIdentityUpdate")]
     public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -278,7 +278,7 @@ public class OrdersController(
     /// Adds tracking number to an order (admin only)
     /// </summary>
     [HttpPost("{id:int}/tracking")]
-    [Authorize(Policy = "ManageOrders")]
+    [Authorize(Policy = "ServiceIdentityUpdate")]
     public async Task<IActionResult> AddTrackingNumber(int id, [FromBody] AddTrackingNumberRequest request)
     {
         var userId = HttpContext.GetUserId();

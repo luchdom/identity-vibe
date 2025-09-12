@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Orders.Data;
-using Orders.Entities;
-using Orders.Entities.Mappers;
+using Orders.Data.Entities;
+using Orders.Data.Entities.Mappers;
 using Orders.Models.Enums;
 using Orders.Models.ViewModels;
 using Orders.Repositories.Interfaces;
@@ -12,7 +12,7 @@ namespace Orders.Repositories;
 public class OrdersRepository(
     OrdersDbContext context) : IOrdersRepository
 {
-    public async Task<Result<OrderData>> CreateOrderAsync(Order order, List<OrderItem> orderItems, OrderStatusHistory statusHistory)
+    public async Task<Result<OrderViewModel>> CreateOrderAsync(Order order, List<OrderItem> orderItems, OrderStatusHistory statusHistory)
     {
         try
         {
@@ -42,15 +42,15 @@ public class OrdersRepository(
                 .Include(o => o.StatusHistory)
                 .FirstAsync(o => o.Id == order.Id);
 
-            return Result<OrderData>.Success(fullOrder.ToDomain());
+            return Result<OrderViewModel>.Success(fullOrder.ToDomain());
         }
         catch (Exception ex)
         {
-            return Result<OrderData>.Failure("ORDER_CREATION_ERROR", $"An error occurred while creating the order: {ex.Message}");
+            return Result<OrderViewModel>.Failure("ORDER_CREATION_ERROR", $"An error occurred while creating the order: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderData?>> GetOrderByIdAsync(int orderId, string? userId = null, bool includeHistory = false)
+    public async Task<Result<OrderViewModel?>> GetOrderByIdAsync(int orderId, string? userId = null, bool includeHistory = false)
     {
         try
         {
@@ -74,16 +74,16 @@ public class OrdersRepository(
             var order = await query.FirstOrDefaultAsync();
             
             return order != null 
-                ? Result<OrderData?>.Success(order.ToDomain())
-                : Result<OrderData?>.Success(null);
+                ? Result<OrderViewModel?>.Success(order.ToDomain())
+                : Result<OrderViewModel?>.Success(null);
         }
         catch (Exception ex)
         {
-            return Result<OrderData?>.Failure("GET_ORDER_ERROR", $"An error occurred while retrieving the order: {ex.Message}");
+            return Result<OrderViewModel?>.Failure("GET_ORDER_ERROR", $"An error occurred while retrieving the order: {ex.Message}");
         }
     }
 
-    public async Task<Result<(List<OrderData> Orders, int TotalCount)>> GetOrdersAsync(string userId, int page, int pageSize, OrderStatus? status = null)
+    public async Task<Result<(List<OrderViewModel> Orders, int TotalCount)>> GetOrdersAsync(string userId, int page, int pageSize, OrderStatus? status = null)
     {
         try
         {
@@ -107,15 +107,15 @@ public class OrdersRepository(
 
             var domainOrders = orders.Select(o => o.ToDomain()).ToList();
             
-            return Result<(List<OrderData>, int)>.Success((domainOrders, totalCount));
+            return Result<(List<OrderViewModel>, int)>.Success((domainOrders, totalCount));
         }
         catch (Exception ex)
         {
-            return Result<(List<OrderData>, int)>.Failure("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}");
+            return Result<(List<OrderViewModel>, int)>.Failure("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}");
         }
     }
 
-    public async Task<Result<(List<OrderData> Orders, int TotalCount)>> GetAllOrdersAsync(int page, int pageSize, OrderStatus? status = null)
+    public async Task<Result<(List<OrderViewModel> Orders, int TotalCount)>> GetAllOrdersAsync(int page, int pageSize, OrderStatus? status = null)
     {
         try
         {
@@ -139,15 +139,15 @@ public class OrdersRepository(
 
             var domainOrders = orders.Select(o => o.ToDomain()).ToList();
             
-            return Result<(List<OrderData>, int)>.Success((domainOrders, totalCount));
+            return Result<(List<OrderViewModel>, int)>.Success((domainOrders, totalCount));
         }
         catch (Exception ex)
         {
-            return Result<(List<OrderData>, int)>.Failure("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}");
+            return Result<(List<OrderViewModel>, int)>.Failure("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderStatusData>> GetOrderStatusAsync(int orderId, string? userId = null)
+    public async Task<Result<OrderStatusViewModel>> GetOrderStatusAsync(int orderId, string? userId = null)
     {
         try
         {
@@ -164,10 +164,10 @@ public class OrdersRepository(
             
             if (order == null)
             {
-                return Result<OrderStatusData>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
+                return Result<OrderStatusViewModel>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
             }
 
-            var statusData = new OrderStatusData
+            var statusData = new OrderStatusViewModel
             {
                 OrderId = order.Id,
                 OrderNumber = order.OrderNumber,
@@ -180,15 +180,15 @@ public class OrdersRepository(
                     .ToList()
             };
 
-            return Result<OrderStatusData>.Success(statusData);
+            return Result<OrderStatusViewModel>.Success(statusData);
         }
         catch (Exception ex)
         {
-            return Result<OrderStatusData>.Failure("GET_ORDER_STATUS_ERROR", $"An error occurred while retrieving order status: {ex.Message}");
+            return Result<OrderStatusViewModel>.Failure("GET_ORDER_STATUS_ERROR", $"An error occurred while retrieving order status: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderData>> UpdateOrderAsync(int orderId, string userId, CustomerData? customer = null, List<OrderItemData>? items = null, ShippingData? shipping = null, string? specialInstructions = null)
+    public async Task<Result<OrderViewModel>> UpdateOrderAsync(int orderId, string userId, CustomerViewModel? customer = null, List<OrderItemViewModel>? items = null, ShippingViewModel? shipping = null, string? specialInstructions = null)
     {
         try
         {
@@ -200,12 +200,12 @@ public class OrdersRepository(
 
             if (order == null)
             {
-                return Result<OrderData>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
+                return Result<OrderViewModel>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
             }
 
             if (!order.CanBeModified())
             {
-                return Result<OrderData>.Failure("ORDER_CANNOT_BE_MODIFIED", 
+                return Result<OrderViewModel>.Failure("ORDER_CANNOT_BE_MODIFIED", 
                     $"Order in {order.Status} status cannot be modified");
             }
 
@@ -257,15 +257,15 @@ public class OrdersRepository(
             order.UpdateTotals();
             await context.SaveChangesAsync();
 
-            return Result<OrderData>.Success(order.ToDomain());
+            return Result<OrderViewModel>.Success(order.ToDomain());
         }
         catch (Exception ex)
         {
-            return Result<OrderData>.Failure("ORDER_UPDATE_ERROR", $"An error occurred while updating the order: {ex.Message}");
+            return Result<OrderViewModel>.Failure("ORDER_UPDATE_ERROR", $"An error occurred while updating the order: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderData>> UpdateOrderStatusAsync(int orderId, OrderStatus newStatus, string adminUserId, string? reason = null, string? notes = null)
+    public async Task<Result<OrderViewModel>> UpdateOrderStatusAsync(int orderId, OrderStatus newStatus, string adminUserId, string? reason = null, string? notes = null)
     {
         try
         {
@@ -277,12 +277,12 @@ public class OrdersRepository(
 
             if (order == null)
             {
-                return Result<OrderData>.Failure("ORDER_NOT_FOUND", "Order not found");
+                return Result<OrderViewModel>.Failure("ORDER_NOT_FOUND", "Order not found");
             }
 
             if (!IsValidStatusTransition(order.Status, newStatus))
             {
-                return Result<OrderData>.Failure("INVALID_STATUS_TRANSITION", 
+                return Result<OrderViewModel>.Failure("INVALID_STATUS_TRANSITION", 
                     $"Cannot change status from {order.Status} to {newStatus}");
             }
 
@@ -318,15 +318,15 @@ public class OrdersRepository(
             context.OrderStatusHistory.Add(statusHistory);
             await context.SaveChangesAsync();
 
-            return Result<OrderData>.Success(order.ToDomain());
+            return Result<OrderViewModel>.Success(order.ToDomain());
         }
         catch (Exception ex)
         {
-            return Result<OrderData>.Failure("ORDER_STATUS_UPDATE_ERROR", $"An error occurred while updating order status: {ex.Message}");
+            return Result<OrderViewModel>.Failure("ORDER_STATUS_UPDATE_ERROR", $"An error occurred while updating order status: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderData>> CancelOrderAsync(int orderId, string userId, string? reason = null, string? notes = null)
+    public async Task<Result<OrderViewModel>> CancelOrderAsync(int orderId, string userId, string? reason = null, string? notes = null)
     {
         try
         {
@@ -338,12 +338,12 @@ public class OrdersRepository(
 
             if (order == null)
             {
-                return Result<OrderData>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
+                return Result<OrderViewModel>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
             }
 
             if (!order.CanBeCancelled())
             {
-                return Result<OrderData>.Failure("ORDER_CANNOT_BE_CANCELLED", 
+                return Result<OrderViewModel>.Failure("ORDER_CANNOT_BE_CANCELLED", 
                     $"Order in {order.Status} status cannot be cancelled");
             }
 
@@ -366,15 +366,15 @@ public class OrdersRepository(
             context.OrderStatusHistory.Add(statusHistory);
             await context.SaveChangesAsync();
 
-            return Result<OrderData>.Success(order.ToDomain());
+            return Result<OrderViewModel>.Success(order.ToDomain());
         }
         catch (Exception ex)
         {
-            return Result<OrderData>.Failure("ORDER_CANCEL_ERROR", $"An error occurred while cancelling the order: {ex.Message}");
+            return Result<OrderViewModel>.Failure("ORDER_CANCEL_ERROR", $"An error occurred while cancelling the order: {ex.Message}");
         }
     }
 
-    public async Task<Result<OrderData>> AddTrackingNumberAsync(int orderId, string trackingNumber, string adminUserId)
+    public async Task<Result<OrderViewModel>> AddTrackingNumberAsync(int orderId, string trackingNumber, string adminUserId)
     {
         try
         {
@@ -386,7 +386,7 @@ public class OrdersRepository(
 
             if (order == null)
             {
-                return Result<OrderData>.Failure("ORDER_NOT_FOUND", "Order not found");
+                return Result<OrderViewModel>.Failure("ORDER_NOT_FOUND", "Order not found");
             }
 
             order.TrackingNumber = trackingNumber;
@@ -406,11 +406,11 @@ public class OrdersRepository(
             context.OrderStatusHistory.Add(statusHistory);
             await context.SaveChangesAsync();
 
-            return Result<OrderData>.Success(order.ToDomain());
+            return Result<OrderViewModel>.Success(order.ToDomain());
         }
         catch (Exception ex)
         {
-            return Result<OrderData>.Failure("ADD_TRACKING_ERROR", $"An error occurred while adding tracking number: {ex.Message}");
+            return Result<OrderViewModel>.Failure("ADD_TRACKING_ERROR", $"An error occurred while adding tracking number: {ex.Message}");
         }
     }
 
@@ -435,7 +435,7 @@ public class OrdersRepository(
         }
     }
 
-    public async Task<Result<Customer?>> FindOrCreateCustomerAsync(CustomerData customerData)
+    public async Task<Result<Customer?>> FindOrCreateCustomerAsync(CustomerViewModel customerData)
     {
         try
         {

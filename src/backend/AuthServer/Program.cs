@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using AuthServer.Data;
+using AuthServer.Data.Entities;
 using Microsoft.AspNetCore.Identity;
 using AuthServer.Configuration;
 using AuthServer.Services;
@@ -11,6 +12,9 @@ using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load scope configuration
+builder.Configuration.AddJsonFile("appsettings.Scopes.json", optional: false, reloadOnChange: true);
 
 // Configure automatic OpenTelemetry instrumentation
 builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0");
@@ -133,8 +137,7 @@ builder.Services.AddOpenIddict()
         // Register the ASP.NET Core host and configure the ASP.NET Core options
         options.UseAspNetCore()
                .EnableTokenEndpointPassthrough()
-               .EnableAuthorizationEndpointPassthrough()
-               .EnableConfigurationEndpointPassthrough();
+               .EnableAuthorizationEndpointPassthrough();
 
         // Configure JWT tokens
         options.UseAspNetCore()

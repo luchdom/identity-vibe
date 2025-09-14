@@ -190,6 +190,102 @@ public class AuthorizationController(
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
+        else if (request.IsRefreshTokenGrantType())
+        {
+            // Retrieve the claims principal stored in the refresh token
+            var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            if (!result.Succeeded)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The refresh token is no longer valid."
+                    }));
+            }
+
+            // Retrieve the user profile corresponding to the refresh token
+            var userId = result.Principal.GetClaim(OpenIddictConstants.Claims.Subject);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The refresh token does not contain a valid user identifier."
+                    }));
+            }
+
+            var user = await userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user associated with the refresh token no longer exists."
+                    }));
+            }
+
+            // Check if user is still active
+            if (!user.IsActive)
+            {
+                return Forbid(
+                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                    properties: new AuthenticationProperties(new Dictionary<string, string?>
+                    {
+                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
+                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user account is disabled."
+                    }));
+            }
+
+            // Create a new ClaimsIdentity containing the claims that will be used to create an id_token, a token or a code.
+            var identity = new ClaimsIdentity(
+                authenticationType: TokenValidationParameters.DefaultAuthenticationType,
+                nameType: OpenIddictConstants.Claims.Name,
+                roleType: OpenIddictConstants.Claims.Role);
+
+            // Add the claims associated with the user to the identity
+            identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
+            
+            // Add profile claims and set destinations
+            var nameClaim = new Claim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
+            nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(nameClaim);
+
+            if (!string.IsNullOrEmpty(user.Email))
+            {
+                var emailClaim = new Claim(OpenIddictConstants.Claims.Email, user.Email);
+                emailClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+                identity.AddClaim(emailClaim);
+            }
+
+            var givenNameClaim = new Claim(OpenIddictConstants.Claims.GivenName, user.FirstName);
+            givenNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(givenNameClaim);
+            
+            var familyNameClaim = new Claim(OpenIddictConstants.Claims.FamilyName, user.LastName);
+            familyNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
+            identity.AddClaim(familyNameClaim);
+
+            // Get user scopes based on configuration (refresh tokens should maintain the same scopes)
+            var originalScopes = result.Principal.GetScopes();
+            var userScopes = scopeConfigService.GetUserScopes(user);
+            
+            // Only keep scopes that the user is still authorized for
+            var validScopes = originalScopes.Where(scope => userScopes.Contains(scope)).ToArray();
+
+            // Set the list of scopes granted to the client application
+            identity.SetScopes(validScopes);
+
+            // Create a new authentication ticket holding the user identity
+            var principal = new ClaimsPrincipal(identity);
+
+            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
 
         return Forbid(
             authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
@@ -206,6 +302,6 @@ public class AuthorizationController(
         // In a production system, you might want to maintain a token blacklist
         // or implement proper token revocation based on your security requirements
         
-        return Ok(new { success = true, message = "Logout successful" });
+        return Ok();
     }
 }

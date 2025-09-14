@@ -31,26 +31,6 @@ public class AccountController(
         return Ok(response);
     }
 
-
-    [HttpPost("logout")]
-    [Authorize]
-    public async Task<IActionResult> Logout()
-    {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-
-        var result = await authenticationService.LogoutAsync(userId);
-        
-        if (result.IsFailure)
-        {
-            return result.ToActionResultWithProblemDetails(HttpContext);
-        }
-
-        return Ok(new { success = true, message = "Logout successful" });
-    }
-
     [HttpGet("profile")]
     [Authorize]
     public async Task<IActionResult> GetProfile()
@@ -67,9 +47,7 @@ public class AccountController(
             return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        return Ok(new {
-            success = true,
-            data = result.Value
-        });
+        var response = result.Value.ToPresentation();
+        return Ok(response);
     }
 }

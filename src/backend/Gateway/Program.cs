@@ -1,9 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Gateway.Services;
-using Gateway.Services.Interfaces;
-using Gateway.Connectors;
-using Gateway.Connectors.Interfaces;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 
@@ -50,11 +46,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateLifetime = false,
-            ValidateIssuerSigningKey = false,
-            ClockSkew = TimeSpan.Zero
+            ValidateIssuer = true,
+            ValidateAudience = false, // Keep disabled for multi-service scenarios
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = authority,
+            ClockSkew = TimeSpan.FromMinutes(5),
+            NameClaimType = "name",
+            RoleClaimType = "role"
         };
     });
 
@@ -96,11 +95,6 @@ builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Clean Architecture Services
-builder.Services.AddScoped<IAuthProxyService, AuthProxyService>();
-
-// Clean Architecture Connectors
-builder.Services.AddScoped<IAuthServerConnector, AuthServerConnector>();
 
 // Add logging services
 builder.Services.AddLoggingServices();

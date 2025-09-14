@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:5002';
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
 
 // Correlation ID utilities
 const generateCorrelationId = (): string => {
@@ -76,13 +76,24 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
+          // Use a fresh axios instance to avoid infinite recursion
+          const formData = new URLSearchParams();
+          formData.append('grant_type', 'refresh_token');
+          formData.append('refresh_token', refreshToken);
+          
           const response = await axios.post(
-            `${BASE_URL}/auth/refresh`,
-            { refreshToken },
-            { withCredentials: true }
+            `${BASE_URL}/connect/token`,
+            formData,
+            { 
+              withCredentials: true,
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Correlation-ID': getOrCreateCorrelationId()
+              }
+            }
           );
 
-          const { accessToken, refreshToken: newRefreshToken } = response.data;
+          const { access_token: accessToken, refresh_token: newRefreshToken } = response.data;
           
           localStorage.setItem('accessToken', accessToken);
           if (newRefreshToken) {
@@ -94,11 +105,15 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, redirect to login
+        // Refresh failed, clear auth data and redirect
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        
+        // Only redirect if not already on login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -113,12 +128,3 @@ api.interceptors.response.use(
   }
 );
 
-// Helper function for making requests without error toasts
-export const apiSilent = {
-  ...api,
-  request: (config: any) => api.request({ ...config, skipErrorToast: true }),
-  get: (url: string, config?: any) => api.get(url, { ...config, skipErrorToast: true }),
-  post: (url: string, data?: any, config?: any) => api.post(url, data, { ...config, skipErrorToast: true }),
-  put: (url: string, data?: any, config?: any) => api.put(url, data, { ...config, skipErrorToast: true }),
-  delete: (url: string, config?: any) => api.delete(url, { ...config, skipErrorToast: true }),
-};

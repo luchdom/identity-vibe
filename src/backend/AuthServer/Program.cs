@@ -28,7 +28,7 @@ builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = (context) =>
     {
         context.ProblemDetails.Instance = context.HttpContext.Request.Path;
-        
+
         // Add traceId if available
         if (context.HttpContext.Request.Headers.ContainsKey("X-Correlation-ID"))
         {
@@ -82,7 +82,7 @@ builder.Services.AddIdentity<AppUser, AppRole>(options =>
     options.Password.RequireUppercase = true;
     options.Password.RequireNonAlphanumeric = true;
     options.Password.RequiredLength = 6;
-    
+
     options.User.RequireUniqueEmail = true;
     options.SignIn.RequireConfirmedEmail = false; // For demo purposes
 })
@@ -165,10 +165,6 @@ builder.Services.AddOpenIddict()
             "admin.manage",
             "admin.users",
             "admin.roles",
-            // Internal service scopes
-            "internal.orders.read",
-            "internal.orders.write",
-            "internal.orders.manage",
             "gateway-bff"
         );
     })

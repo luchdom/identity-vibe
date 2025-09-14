@@ -31,6 +31,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=postgres
+      # URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=authserver
       - OTEL_SERVICE_VERSION=1.0.0
@@ -58,6 +63,11 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
+      # URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=gateway
       - OTEL_SERVICE_VERSION=1.0.0
@@ -83,6 +93,11 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
+      # URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=orders
       - OTEL_SERVICE_VERSION=1.0.0

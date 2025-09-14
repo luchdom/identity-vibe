@@ -82,15 +82,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.RequireHttpsMetadata = false; // For development only
         options.IncludeErrorDetails = true; // For development debugging
         
-        // Completely disable JWT validation for debugging - ONLY FOR DEVELOPMENT
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateLifetime = false,
-            ValidateIssuerSigningKey = false,
-            RequireExpirationTime = false,
-            RequireSignedTokens = false,
+            ValidateIssuer = true,
+            ValidateAudience = false, // Keep disabled for multi-service scenarios
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = authority,
+            ClockSkew = TimeSpan.FromMinutes(5),
             NameClaimType = "name",
             RoleClaimType = "role"
         };

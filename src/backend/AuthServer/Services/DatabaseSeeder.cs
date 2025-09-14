@@ -170,6 +170,17 @@ public class DatabaseSeeder(
     {
         logger.LogInformation("Starting OpenIddict seeding...");
         
+        // Create all required scopes from configuration
+        await SeedScopesAsync();
+        
+        // Sync all clients from configuration to database
+        await SyncClientsFromConfigurationAsync();
+
+        logger.LogInformation("OpenIddict seeding completed");
+    }
+
+    private async Task SeedScopesAsync()
+    {
         // Create required scopes manually
         var requiredScopes = new[]
         {
@@ -214,36 +225,83 @@ public class DatabaseSeeder(
                 logger.LogInformation("Created scope: {ScopeName}", scopeName);
             }
         }
+    }
 
-        // Create gateway-bff client manually
-        if (await applicationManager.FindByClientIdAsync("gateway-bff") == null)
+    private async Task SyncClientsFromConfigurationAsync()
+    {
+        var configuredClients = scopeConfig.Value.ServiceClients?.Clients ?? new Dictionary<string, ServiceClientConfig>();
+        
+        logger.LogInformation("Syncing {Count} clients from configuration", configuredClients.Count);
+
+        foreach (var (key, clientConfig) in configuredClients)
         {
-            var descriptor = new OpenIddictApplicationDescriptor
-            {
-                ClientId = "gateway-bff",
-                ClientSecret = "gateway-secret",
-                DisplayName = "Gateway BFF",
-                ConsentType = OpenIddictConstants.ConsentTypes.Implicit
-            };
+            await CreateOrUpdateClientAsync(clientConfig);
+        }
+    }
 
-            // Add grant types
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.Password);
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.RefreshToken);
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.ClientCredentials);
+    private async Task CreateOrUpdateClientAsync(ServiceClientConfig clientConfig)
+    {
+        var existingClient = await applicationManager.FindByClientIdAsync(clientConfig.ClientId);
+        
+        if (existingClient == null)
+        {
+            // Create new client
+            await CreateClientFromConfigAsync(clientConfig);
+        }
+        else
+        {
+            // Update existing client with latest configuration
+            await UpdateClientFromConfigAsync(existingClient, clientConfig);
+        }
+    }
 
-            // Add endpoint permissions
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
-            
-            // Add scope permissions
-            foreach (var scope in requiredScopes)
-            {
-                descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
-            }
+    private async Task CreateClientFromConfigAsync(ServiceClientConfig clientConfig)
+    {
+        var descriptor = new OpenIddictApplicationDescriptor
+        {
+            ClientId = clientConfig.ClientId,
+            DisplayName = clientConfig.DisplayName,
+            ConsentType = OpenIddictConstants.ConsentTypes.Implicit
+        };
 
-            await applicationManager.CreateAsync(descriptor);
-            logger.LogInformation("Created client: gateway-bff");
+        // Set client secret only if provided (supports public clients)
+        if (!string.IsNullOrEmpty(clientConfig.ClientSecret))
+        {
+            descriptor.ClientSecret = clientConfig.ClientSecret;
         }
 
-        logger.LogInformation("OpenIddict seeding completed");
+        // Add grant type permissions
+        if (clientConfig.GrantTypes?.Contains("password") == true)
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.Password);
+        if (clientConfig.GrantTypes?.Contains("refresh_token") == true)
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.RefreshToken);
+        if (clientConfig.GrantTypes?.Contains("client_credentials") == true)
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.ClientCredentials);
+
+        // Add endpoint permissions
+        descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
+        
+        // Add scope permissions
+        foreach (var scope in clientConfig.AllowedScopes ?? [])
+        {
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
+        }
+
+        // Add redirect URIs
+        foreach (var uri in clientConfig.RedirectUris ?? [])
+        {
+            descriptor.RedirectUris.Add(new Uri(uri));
+        }
+
+        await applicationManager.CreateAsync(descriptor);
+        logger.LogInformation("Created client: {ClientId} ({DisplayName})", clientConfig.ClientId, clientConfig.DisplayName);
+    }
+
+    private async Task UpdateClientFromConfigAsync(object existingClient, ServiceClientConfig clientConfig)
+    {
+        // Delete and recreate (simpler than complex update logic)
+        await applicationManager.DeleteAsync(existingClient);
+        await CreateClientFromConfigAsync(clientConfig);
+        logger.LogInformation("Updated client: {ClientId} ({DisplayName})", clientConfig.ClientId, clientConfig.DisplayName);
     }
 }

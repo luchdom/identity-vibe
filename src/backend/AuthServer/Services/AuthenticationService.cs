@@ -48,7 +48,7 @@ public class AuthenticationService(
             };
 
             var createdUser = await userRepository.CreateAsync(newUserViewModel, command.Password);
-            
+
             await userRepository.AddToRoleAsync(createdUser.Id, "User");
 
             var authenticatedUser = new AuthenticatedUserViewModel
@@ -61,7 +61,7 @@ public class AuthenticationService(
                 IsActive = createdUser.IsActive,
                 CreatedAt = createdUser.CreatedAt
             };
-            
+
             var registrationData = new RegistrationDataViewModel
             {
                 User = authenticatedUser
@@ -76,21 +76,4 @@ public class AuthenticationService(
             return Result<RegistrationDataViewModel>.Failure("REGISTRATION_ERROR", "An error occurred during registration");
         }
     }
-
-    public Task<Result> LogoutAsync(string userId)
-    {
-        try
-        {
-            logger.LogInformation("Logout attempt for user {UserId}", userId);
-            
-            logger.LogInformation("Logout successful for user {UserId}", userId);
-            return Task.FromResult(Result.Success());
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Logout error for user {UserId}", userId);
-            return Task.FromResult(Result.Failure("LOGOUT_ERROR", "An error occurred during logout"));
-        }
-    }
-
 }

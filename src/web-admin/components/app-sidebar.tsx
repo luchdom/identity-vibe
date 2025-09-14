@@ -1,7 +1,11 @@
+'use client'
+
 import * as React from "react"
-import { GalleryVerticalEnd, Minus, Plus } from "lucide-react"
+import { GalleryVerticalEnd, Minus, Plus, ShoppingCart, Home, Users, Settings, LogOut, User, Shield } from "lucide-react"
 
 import { SearchForm } from "@/components/search-form"
+import { useAuth } from "@/contexts/auth-context"
+import { isAdmin } from "@/components/auth/AuthGuard"
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,6 +14,7 @@ import {
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
@@ -20,142 +25,105 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { NavUser } from "./nav-user"
 
-// This is sample data.
+// Identity System Admin Navigation
 const data = {
   navMain: [
     {
-      title: "Getting Started",
-      url: "#",
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: Home,
       items: [
         {
-          title: "Installation",
-          url: "#",
-        },
-        {
-          title: "Project Structure",
-          url: "#",
+          title: "Overview",
+          url: "/dashboard",
         },
       ],
     },
     {
-      title: "Building Your Application",
+      title: "Orders Management",
       url: "#",
+      icon: ShoppingCart,
       items: [
         {
-          title: "Routing",
-          url: "#",
-        },
-        {
-          title: "Data Fetching",
-          url: "#",
+          title: "All Orders",
+          url: "/orders",
           isActive: true,
         },
         {
-          title: "Rendering",
-          url: "#",
+          title: "Pending Orders",
+          url: "/orders?status=0",
         },
         {
-          title: "Caching",
-          url: "#",
+          title: "Shipped Orders",
+          url: "/orders?status=3",
         },
         {
-          title: "Styling",
-          url: "#",
-        },
-        {
-          title: "Optimizing",
-          url: "#",
-        },
-        {
-          title: "Configuring",
-          url: "#",
-        },
-        {
-          title: "Testing",
-          url: "#",
-        },
-        {
-          title: "Authentication",
-          url: "#",
-        },
-        {
-          title: "Deploying",
-          url: "#",
-        },
-        {
-          title: "Upgrading",
-          url: "#",
-        },
-        {
-          title: "Examples",
-          url: "#",
+          title: "Cancelled Orders",
+          url: "/orders?status=5",
         },
       ],
     },
     {
-      title: "API Reference",
+      title: "User Management",
       url: "#",
+      icon: Users,
       items: [
         {
-          title: "Components",
-          url: "#",
+          title: "All Users",
+          url: "/users",
         },
         {
-          title: "File Conventions",
-          url: "#",
+          title: "Roles & Permissions",
+          url: "/users/roles",
         },
         {
-          title: "Functions",
-          url: "#",
-        },
-        {
-          title: "next.config.js Options",
-          url: "#",
-        },
-        {
-          title: "CLI",
-          url: "#",
-        },
-        {
-          title: "Edge Runtime",
-          url: "#",
+          title: "User Activity",
+          url: "/users/activity",
         },
       ],
     },
     {
-      title: "Architecture",
+      title: "System Settings",
       url: "#",
+      icon: Settings,
       items: [
         {
-          title: "Accessibility",
-          url: "#",
+          title: "General Settings",
+          url: "/settings",
         },
         {
-          title: "Fast Refresh",
-          url: "#",
+          title: "OAuth Clients",
+          url: "/settings/oauth",
         },
         {
-          title: "Next.js Compiler",
-          url: "#",
+          title: "API Keys",
+          url: "/settings/api-keys",
         },
         {
-          title: "Supported Browsers",
-          url: "#",
-        },
-        {
-          title: "Turbopack",
-          url: "#",
+          title: "Audit Logs",
+          url: "/settings/audit",
         },
       ],
     },
     {
-      title: "Community",
+      title: "Admin Panel",
       url: "#",
+      icon: Shield,
+      adminOnly: true,
       items: [
         {
-          title: "Contribution Guide",
-          url: "#",
+          title: "System Overview",
+          url: "/admin",
+        },
+        {
+          title: "Advanced Settings",
+          url: "/admin/settings",
+        },
+        {
+          title: "System Diagnostics",
+          url: "/admin/diagnostics",
         },
       ],
     },
@@ -163,6 +131,18 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Redirect to login page after logout
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <Sidebar {...props}>
       <SidebarHeader>
@@ -174,7 +154,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <GalleryVerticalEnd className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-medium">Documentation</span>
+                  <span className="font-medium">Identity Admin</span>
                   <span className="">v1.0.0</span>
                 </div>
               </a>
@@ -186,7 +166,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {data.navMain.map((item, index) => (
+            {data.navMain.filter(item => !item.adminOnly || isAdmin(user)).map((item, index) => (
               <Collapsible
                 key={item.title}
                 defaultOpen={index === 1}
@@ -195,6 +175,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <SidebarMenuItem>
                   <CollapsibleTrigger asChild>
                     <SidebarMenuButton>
+                      {item.icon && <item.icon className="mr-2 h-4 w-4" />}
                       {item.title}{" "}
                       <Plus className="ml-auto group-data-[state=open]/collapsible:hidden" />
                       <Minus className="ml-auto group-data-[state=closed]/collapsible:hidden" />
@@ -207,7 +188,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           <SidebarMenuSubItem key={item.title}>
                             <SidebarMenuSubButton
                               asChild
-                              isActive={item.isActive}
+                              isActive={'isActive' in item ? item.isActive : false}
                             >
                               <a href={item.url}>{item.title}</a>
                             </SidebarMenuSubButton>
@@ -222,6 +203,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        {user && (
+          <NavUser 
+            user={{
+              name: `${user.firstName} ${user.lastName}`,
+              email: user.email,
+              avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(`${user.firstName} ${user.lastName}`)}`
+            }}
+            onLogout={handleLogout}
+          />
+        )}
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

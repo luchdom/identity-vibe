@@ -14,7 +14,8 @@ public class DatabaseSeeder(
     ILogger<DatabaseSeeder> logger,
     IOpenIddictApplicationManager applicationManager,
     IOpenIddictScopeManager scopeManager,
-    IOptions<ScopeConfiguration> scopeConfig)
+    IOptions<ScopeConfiguration> scopeConfig,
+    IOptions<ClientConfiguration> clientConfig)
 {
     public async Task SeedAsync()
     {
@@ -169,10 +170,10 @@ public class DatabaseSeeder(
     private async Task SeedOpenIddictAsync()
     {
         logger.LogInformation("Starting OpenIddict seeding...");
-        
+
         // Create all required scopes from configuration
         await SeedScopesAsync();
-        
+
         // Sync all clients from configuration to database
         await SyncClientsFromConfigurationAsync();
 
@@ -181,127 +182,176 @@ public class DatabaseSeeder(
 
     private async Task SeedScopesAsync()
     {
-        // Create required scopes manually
-        var requiredScopes = new[]
-        {
-            "openid", "profile", "email", "offline_access", 
-            // Orders-specific scopes
-            "orders.read", "orders.write", "orders.manage",
-            // Profile scopes
-            "profile.read", "profile.write", 
-            // Admin scopes
-            "admin.manage", "admin.users", "admin.roles"
-        };
+        // Read scopes from configuration
+        var configuredScopes = scopeConfig.Value.Scopes ?? new List<ScopeSettings>();
 
-        foreach (var scopeName in requiredScopes)
+        if (!configuredScopes.Any())
         {
-            if (await scopeManager.FindByNameAsync(scopeName) == null)
+            logger.LogWarning("No scopes configured in appsettings.Scopes.json");
+            return;
+        }
+
+        logger.LogInformation("Seeding {Count} scopes from configuration", configuredScopes.Count);
+
+        foreach (var scope in configuredScopes)
+        {
+            if (await scopeManager.FindByNameAsync(scope.Name) == null)
             {
                 var descriptor = new OpenIddictScopeDescriptor
                 {
-                    Name = scopeName,
-                    DisplayName = scopeName switch
-                    {
-                        "openid" => "OpenID Connect",
-                        "profile" => "Profile", 
-                        "email" => "Email",
-                        "offline_access" => "Offline Access",
-                        // Orders scopes
-                        "orders.read" => "Read Orders",
-                        "orders.write" => "Create/Update Orders",
-                        "orders.manage" => "Manage Orders (Admin)",
-                        // Profile scopes
-                        "profile.read" => "Read Profile", 
-                        "profile.write" => "Write Profile",
-                        // Admin scopes
-                        "admin.manage" => "Admin Management",
-                        "admin.users" => "Admin User Management",
-                        "admin.roles" => "Admin Role Management",
-                        _ => scopeName
-                    }
+                    Name = scope.Name,
+                    DisplayName = scope.DisplayName,
+                    Description = scope.Description
                 };
 
+                // Add resources if any are configured
+                if (scope.Resources?.Any() == true)
+                {
+                    foreach (var resource in scope.Resources)
+                    {
+                        descriptor.Resources.Add(resource);
+                    }
+                }
+
                 await scopeManager.CreateAsync(descriptor);
-                logger.LogInformation("Created scope: {ScopeName}", scopeName);
+                logger.LogInformation("Created scope: {ScopeName} - {DisplayName}", scope.Name, scope.DisplayName);
+            }
+            else
+            {
+                // Update existing scope if configuration has changed
+                var existingScope = await scopeManager.FindByNameAsync(scope.Name);
+                if (existingScope != null)
+                {
+                    var descriptor = new OpenIddictScopeDescriptor();
+                    await scopeManager.PopulateAsync(descriptor, existingScope);
+
+                    // Update display name and description
+                    descriptor.DisplayName = scope.DisplayName;
+                    descriptor.Description = scope.Description;
+
+                    // Update resources
+                    descriptor.Resources.Clear();
+                    if (scope.Resources?.Any() == true)
+                    {
+                        foreach (var resource in scope.Resources)
+                        {
+                            descriptor.Resources.Add(resource);
+                        }
+                    }
+
+                    await scopeManager.UpdateAsync(existingScope, descriptor);
+                    logger.LogDebug("Updated scope: {ScopeName}", scope.Name);
+                }
             }
         }
     }
 
     private async Task SyncClientsFromConfigurationAsync()
     {
-        var configuredClients = scopeConfig.Value.ServiceClients?.Clients ?? new Dictionary<string, ServiceClientConfig>();
-        
+        var configuredClients = clientConfig.Value.Clients ?? new List<ClientSettings>();
+
         logger.LogInformation("Syncing {Count} clients from configuration", configuredClients.Count);
 
-        foreach (var (key, clientConfig) in configuredClients)
+        foreach (var client in configuredClients)
         {
-            await CreateOrUpdateClientAsync(clientConfig);
+            await CreateOrUpdateClientAsync(client);
         }
     }
 
-    private async Task CreateOrUpdateClientAsync(ServiceClientConfig clientConfig)
+    private async Task CreateOrUpdateClientAsync(ClientSettings clientSettings)
     {
-        var existingClient = await applicationManager.FindByClientIdAsync(clientConfig.ClientId);
-        
+        var existingClient = await applicationManager.FindByClientIdAsync(clientSettings.ClientId);
+
         if (existingClient == null)
         {
             // Create new client
-            await CreateClientFromConfigAsync(clientConfig);
+            await CreateClientFromConfigAsync(clientSettings);
         }
         else
         {
             // Update existing client with latest configuration
-            await UpdateClientFromConfigAsync(existingClient, clientConfig);
+            await UpdateClientFromConfigAsync(existingClient, clientSettings);
         }
     }
 
-    private async Task CreateClientFromConfigAsync(ServiceClientConfig clientConfig)
+    private async Task CreateClientFromConfigAsync(ClientSettings clientSettings)
     {
         var descriptor = new OpenIddictApplicationDescriptor
         {
-            ClientId = clientConfig.ClientId,
-            DisplayName = clientConfig.DisplayName,
-            ConsentType = OpenIddictConstants.ConsentTypes.Implicit
+            ClientId = clientSettings.ClientId,
+            DisplayName = clientSettings.DisplayName,
+            ConsentType = clientSettings.RequireConsent
+                ? OpenIddictConstants.ConsentTypes.Explicit
+                : OpenIddictConstants.ConsentTypes.Implicit,
+            ClientType = clientSettings.Type.ToLowerInvariant() == "confidential"
+                ? OpenIddictConstants.ClientTypes.Confidential
+                : OpenIddictConstants.ClientTypes.Public
         };
 
-        // Set client secret only if provided (supports public clients)
-        if (!string.IsNullOrEmpty(clientConfig.ClientSecret))
+        // Set client secret for confidential clients
+        if (clientSettings.Type.ToLowerInvariant() == "confidential" &&
+            !string.IsNullOrEmpty(clientSettings.ClientSecret))
         {
-            descriptor.ClientSecret = clientConfig.ClientSecret;
+            descriptor.ClientSecret = clientSettings.ClientSecret;
         }
 
         // Add grant type permissions
-        if (clientConfig.GrantTypes?.Contains("password") == true)
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.Password);
-        if (clientConfig.GrantTypes?.Contains("refresh_token") == true)
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.RefreshToken);
-        if (clientConfig.GrantTypes?.Contains("client_credentials") == true)
-            descriptor.Permissions.Add(OpenIddictConstants.Permissions.GrantTypes.ClientCredentials);
+        foreach (var grantType in clientSettings.AllowedGrantTypes ?? new())
+        {
+            var permission = grantType.ToLowerInvariant() switch
+            {
+                "authorization_code" => OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
+                "client_credentials" => OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                "refresh_token" => OpenIddictConstants.Permissions.GrantTypes.RefreshToken,
+                "password" => OpenIddictConstants.Permissions.GrantTypes.Password,
+                _ => $"gt:{grantType}"
+            };
+            descriptor.Permissions.Add(permission);
+        }
 
-        // Add endpoint permissions
+        // Add endpoint permissions based on grant types
+        if (clientSettings.AllowedGrantTypes?.Contains("authorization_code") == true)
+        {
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Authorization);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.EndSession);
+            descriptor.Permissions.Add(OpenIddictConstants.Permissions.ResponseTypes.Code);
+        }
         descriptor.Permissions.Add(OpenIddictConstants.Permissions.Endpoints.Token);
-        
+
         // Add scope permissions
-        foreach (var scope in clientConfig.AllowedScopes ?? [])
+        foreach (var scope in clientSettings.AllowedScopes ?? new())
         {
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
         }
 
         // Add redirect URIs
-        foreach (var uri in clientConfig.RedirectUris ?? [])
+        foreach (var uri in clientSettings.RedirectUris ?? new())
         {
             descriptor.RedirectUris.Add(new Uri(uri));
         }
 
+        // Add post-logout redirect URIs
+        foreach (var uri in clientSettings.PostLogoutRedirectUris ?? new())
+        {
+            descriptor.PostLogoutRedirectUris.Add(new Uri(uri));
+        }
+
+        // Handle PKCE requirement
+        if (clientSettings.RequirePkce && clientSettings.Type.ToLowerInvariant() == "public")
+        {
+            descriptor.Requirements.Add(OpenIddictConstants.Requirements.Features.ProofKeyForCodeExchange);
+        }
+
         await applicationManager.CreateAsync(descriptor);
-        logger.LogInformation("Created client: {ClientId} ({DisplayName})", clientConfig.ClientId, clientConfig.DisplayName);
+        logger.LogInformation("Created client: {ClientId} ({DisplayName}, Type: {Type})",
+            clientSettings.ClientId, clientSettings.DisplayName, clientSettings.Type);
     }
 
-    private async Task UpdateClientFromConfigAsync(object existingClient, ServiceClientConfig clientConfig)
+    private async Task UpdateClientFromConfigAsync(object existingClient, ClientSettings clientSettings)
     {
         // Delete and recreate (simpler than complex update logic)
         await applicationManager.DeleteAsync(existingClient);
-        await CreateClientFromConfigAsync(clientConfig);
-        logger.LogInformation("Updated client: {ClientId} ({DisplayName})", clientConfig.ClientId, clientConfig.DisplayName);
+        await CreateClientFromConfigAsync(clientSettings);
+        logger.LogInformation("Updated client: {ClientId} ({DisplayName})", clientSettings.ClientId, clientSettings.DisplayName);
     }
 }

@@ -53,6 +53,13 @@ export class AuthApi {
     
     // Transform OAuth2 response to our interface
     const oauthData = response.data;
+    
+    // Store tokens BEFORE making profile request so api interceptor can use them
+    localStorage.setItem('accessToken', oauthData.access_token);
+    if (oauthData.refresh_token) {
+      localStorage.setItem('refreshToken', oauthData.refresh_token);
+    }
+    
     const profileResponse = await api.get('/account/profile');
     
     return {

@@ -8,13 +8,18 @@ using AuthServer.Services;
 using AuthServer.Services.Interfaces;
 using AuthServer.Repositories;
 using AuthServer.Repositories.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using OpenIddict.Validation.AspNetCore;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Load scope configuration
 builder.Configuration.AddJsonFile("appsettings.Scopes.json", optional: false, reloadOnChange: true);
+// Load client configuration
+builder.Configuration.AddJsonFile("appsettings.Clients.json", optional: false, reloadOnChange: true);
 
 // Configure automatic OpenTelemetry instrumentation
 builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0");
@@ -89,9 +94,20 @@ builder.Services.AddIdentity<AppUser, AppRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
+builder.Services.AddAuthorization(options =>
+{
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+        .Build();
+});
+
 // Configure scope options
 builder.Services.Configure<ScopeConfiguration>(
     builder.Configuration.GetSection("ScopeConfiguration"));
+// Configure client options
+builder.Services.Configure<ClientConfiguration>(
+    builder.Configuration);
 
 // Register services
 builder.Services.AddScoped<ScopeConfigurationService>();
@@ -100,7 +116,6 @@ builder.Services.AddScoped<DatabaseSeeder>();
 // Clean Architecture Services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<ITokenService, TokenService>();
 
 // Clean Architecture Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
@@ -120,59 +135,77 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
+        // Configure issuer URL from environment variable
+        var externalAuthUrl = builder.Configuration["EXTERNAL_AUTH_URL"] ?? "https://localhost:5000";
+        options.SetIssuer(new Uri(externalAuthUrl));
+
         options
-            .SetTokenEndpointUris("/connect/token")
-            .SetAuthorizationEndpointUris("/connect/authorize")
-            .SetIntrospectionEndpointUris("/connect/introspect");
+            .SetTokenEndpointUris("/connect/token");
 
         // Enable the required flows
         options.AllowPasswordFlow()
                .AllowClientCredentialsFlow()
                .AllowRefreshTokenFlow();
 
+        // Accept anonymous clients (i.e clients that don't send a client_id).
+        options.AcceptAnonymousClients();
+
         // Register the signing and encryption credentials
         options.AddDevelopmentEncryptionCertificate()
                .AddDevelopmentSigningCertificate();
 
         // Register the ASP.NET Core host and configure the ASP.NET Core options
-        options.UseAspNetCore()
-               .EnableTokenEndpointPassthrough()
-               .EnableAuthorizationEndpointPassthrough();
-
         // Configure JWT tokens
         options.UseAspNetCore()
                .EnableTokenEndpointPassthrough()
                .DisableTransportSecurityRequirement();
 
-        // Configure the JWT handler
-        options.AddEphemeralEncryptionKey()
-               .AddEphemeralSigningKey()
-               .DisableAccessTokenEncryption();
+        // Disable access token encryption for easier integration with third-party APIs
+        options.DisableAccessTokenEncryption();
 
-        // Configure scopes
-        options.RegisterScopes(
+        // Configure scopes from configuration
+        // Note: We can't use DI here as the container isn't built yet
+        // The scopes will be properly registered from configuration during database seeding
+        // For now, register the standard OpenIddict scopes and custom scopes
+        var scopesToRegister = new List<string>
+        {
+            OpenIddictConstants.Scopes.OpenId,
             OpenIddictConstants.Scopes.Email,
             OpenIddictConstants.Scopes.Profile,
-            OpenIddictConstants.Scopes.Roles,
-            // Orders-specific scopes
-            "orders.read",
-            "orders.write",
-            "orders.manage",
-            // Profile scopes
-            "profile.read",
-            "profile.write",
-            // Admin scopes
-            "admin.manage",
-            "admin.users",
-            "admin.roles",
-            "gateway-bff"
-        );
+            OpenIddictConstants.Scopes.OfflineAccess,
+            OpenIddictConstants.Scopes.Roles
+        };
+
+        // Add custom scopes from configuration if available
+        var scopeConfigSection = builder.Configuration.GetSection("ScopeConfiguration:Scopes");
+        if (scopeConfigSection.Exists())
+        {
+            var customScopes = scopeConfigSection.Get<List<ScopeSettings>>();
+            if (customScopes != null)
+            {
+                scopesToRegister.AddRange(customScopes.Select(s => s.Name));
+            }
+        }
+        else
+        {
+            // Fallback to hardcoded scopes if configuration is missing
+            scopesToRegister.AddRange(new[]
+            {
+                "orders.read", "orders.write", "orders.manage",
+                "profile.read", "profile.write",
+                "admin.manage", "admin.users", "admin.roles",
+                "gateway-bff"
+            });
+        }
+
+        options.RegisterScopes(scopesToRegister.Distinct().ToArray());
     })
     .AddValidation(options =>
     {
         options.UseLocalServer();
         options.UseAspNetCore();
     });
+
 
 var app = builder.Build();
 
@@ -187,7 +220,12 @@ app.UseHttpsRedirection();
 
 // Problem Details middleware is enabled automatically with AddProblemDetails()
 
+app.UseRouting();
+
 app.UseCors("DefaultPolicy");
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Add OpenTelemetry middleware
 app.UseOpenTelemetryMiddleware();
@@ -195,9 +233,6 @@ app.UseOpenTelemetryMiddleware();
 // Add logging middleware
 app.UseLoggingMiddleware();
 app.UseSerilogMiddleware();
-
-app.UseAuthentication();
-app.UseAuthorization();
 
 app.MapControllers();
 

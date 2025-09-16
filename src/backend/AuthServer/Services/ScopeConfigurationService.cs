@@ -19,9 +19,9 @@ public class ScopeConfigurationService(
         var userRoles = await userManager.GetRolesAsync(user);
         foreach (var role in userRoles)
         {
-            if (_scopeConfig.UserScopes.RoleScopes.ContainsKey(role))
+            if (_scopeConfig.UserScopes.RoleScopes.TryGetValue(role, out var scope))
             {
-                scopes.AddRange(_scopeConfig.UserScopes.RoleScopes[role]);
+                scopes.AddRange(scope);
             }
         }
 
@@ -34,64 +34,26 @@ public class ScopeConfigurationService(
         return GetUserScopesAsync(user).GetAwaiter().GetResult();
     }
 
-    public string[] GetClientScopes(string clientId)
+    public IEnumerable<ScopeSettings> GetAllScopes()
     {
-        if (_scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig))
-        {
-            return clientConfig.AllowedScopes;
-        }
-
-        return Array.Empty<string>();
+        return _scopeConfig.Scopes;
     }
 
-    public ServiceClientConfig? GetClientConfig(string clientId)
+    public ScopeSettings? GetScopeSettings(string scopeName)
     {
-        _scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig);
-        return clientConfig;
+        return _scopeConfig.Scopes.FirstOrDefault(s => s.Name == scopeName);
     }
 
-    public IEnumerable<ServiceClientConfig> GetAllClients()
+    public bool IsValidScope(string scopeName)
     {
-        return _scopeConfig.ServiceClients.Clients.Values;
+        return _scopeConfig.Scopes.Any(s => s.Name == scopeName);
     }
 
-    public bool IsValidClient(string clientId, string clientSecret)
+    public string[] GetScopesByResource(string resourceName)
     {
-        if (_scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig))
-        {
-            return clientConfig.ClientSecret == clientSecret;
-        }
-
-        return false;
-    }
-
-    public bool IsValidGrantType(string clientId, string grantType)
-    {
-        if (_scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig))
-        {
-            return clientConfig.GrantTypes.Contains(grantType);
-        }
-
-        return false;
-    }
-
-    public bool IsValidScope(string clientId, string scope)
-    {
-        if (_scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig))
-        {
-            return clientConfig.AllowedScopes.Contains(scope);
-        }
-
-        return false;
-    }
-
-    public string[] GetValidScopesForClient(string clientId, string[] requestedScopes)
-    {
-        if (_scopeConfig.ServiceClients.Clients.TryGetValue(clientId, out var clientConfig))
-        {
-            return requestedScopes.Where(scope => clientConfig.AllowedScopes.Contains(scope)).ToArray();
-        }
-
-        return Array.Empty<string>();
+        return _scopeConfig.Scopes
+            .Where(s => s.Resources.Contains(resourceName))
+            .Select(s => s.Name)
+            .ToArray();
     }
 } 

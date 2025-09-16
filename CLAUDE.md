@@ -190,3 +190,4 @@ For detailed implementation examples and patterns:
 - **docs/DEVELOPMENT.md**: Setup instructions, troubleshooting, debugging
 - **docs/DEPLOYMENT.md**: Docker configurations, environments, monitoring
 </documentation_references>
+- Remember to make sure we are following the documentation for OpenIddict in its last version: https://documentation.openiddict.com/guides/getting-started/

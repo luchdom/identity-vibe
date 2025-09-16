@@ -2,25 +2,33 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AuthServer.Services;
 using AuthServer.Models;
+using Microsoft.Extensions.Options;
+using AuthServer.Configuration;
+using OpenIddict.Abstractions;
 
 namespace AuthServer.Controllers;
 
 [ApiController]
 [Route("[controller]")]
 [Authorize]
-public class ScopeController(ScopeConfigurationService scopeConfigService) : ControllerBase
+public class ScopeController(
+    ScopeConfigurationService scopeConfigService,
+    IOptions<ClientConfiguration> clientConfig,
+    IOpenIddictApplicationManager applicationManager) : ControllerBase
 {
     [HttpGet("clients")]
     public ActionResult<IEnumerable<object>> GetClients()
     {
-        var clients = scopeConfigService.GetAllClients().Select(client => new
+        var clients = clientConfig.Value.Clients.Select(client => new
         {
             client.ClientId,
             client.DisplayName,
-            client.Description,
+            client.Type,
             client.AllowedScopes,
-            client.GrantTypes,
-            client.RedirectUris
+            client.AllowedGrantTypes,
+            client.RedirectUris,
+            client.RequireConsent,
+            client.RequirePkce
         });
 
         return Ok(clients);
@@ -29,7 +37,7 @@ public class ScopeController(ScopeConfigurationService scopeConfigService) : Con
     [HttpGet("clients/{clientId}")]
     public ActionResult<object> GetClient(string clientId)
     {
-        var client = scopeConfigService.GetClientConfig(clientId);
+        var client = clientConfig.Value.Clients.FirstOrDefault(c => c.ClientId == clientId);
         if (client == null)
         {
             return NotFound();
@@ -39,51 +47,37 @@ public class ScopeController(ScopeConfigurationService scopeConfigService) : Con
         {
             client.ClientId,
             client.DisplayName,
-            client.Description,
+            client.Type,
             client.AllowedScopes,
-            client.GrantTypes,
-            client.RedirectUris
+            client.AllowedGrantTypes,
+            client.RedirectUris,
+            client.PostLogoutRedirectUris,
+            client.RequireConsent,
+            client.RequirePkce
         });
     }
 
     [HttpGet("scopes")]
     public ActionResult<object> GetScopes()
     {
-        // Return all available scopes (this could be enhanced to read from configuration)
-        var scopes = new
+        var allScopes = scopeConfigService.GetAllScopes().Select(scope => new
         {
-            OpenIdScopes = new[]
-            {
-                "openid",
-                "profile",
-                "email",
-                "offline_access"
-            },
-            UserScopes = new[]
-            {
-                "orders.read",
-                "orders.write", 
-                "orders.manage",
-                "profile.read",
-                "profile.write",
-                "admin.manage"
-            },
-            ServiceScopes = new[]
-            {
-                "internal.orders.read",
-                "internal.orders.write",
-                "internal.orders.manage"
-            }
-        };
+            scope.Name,
+            scope.DisplayName,
+            scope.Description,
+            scope.Resources
+        });
 
-        return Ok(scopes);
+        return Ok(allScopes);
     }
 
     [HttpGet("validate-client")]
-    public ActionResult<object> ValidateClient([FromQuery] string clientId, [FromQuery] string clientSecret)
+    public async Task<ActionResult<object>> ValidateClient([FromQuery] string clientId, [FromQuery] string clientSecret)
     {
-        var isValid = scopeConfigService.IsValidClient(clientId, clientSecret);
-        var client = scopeConfigService.GetClientConfig(clientId);
+        var client = clientConfig.Value.Clients.FirstOrDefault(c => c.ClientId == clientId);
+        var isValid = client != null &&
+                     (client.Type.ToLowerInvariant() == "public" ||
+                      client.ClientSecret == clientSecret);
 
         return Ok(new
         {
@@ -92,9 +86,9 @@ public class ScopeController(ScopeConfigurationService scopeConfigService) : Con
             {
                 client.ClientId,
                 client.DisplayName,
-                client.Description,
+                client.Type,
                 client.AllowedScopes,
-                client.GrantTypes
+                client.AllowedGrantTypes
             } : null
         });
     }
@@ -102,8 +96,8 @@ public class ScopeController(ScopeConfigurationService scopeConfigService) : Con
     [HttpGet("validate-scope")]
     public ActionResult<object> ValidateScope([FromQuery] string clientId, [FromQuery] string scope)
     {
-        var isValid = scopeConfigService.IsValidScope(clientId, scope);
-        var client = scopeConfigService.GetClientConfig(clientId);
+        var client = clientConfig.Value.Clients.FirstOrDefault(c => c.ClientId == clientId);
+        var isValid = client?.AllowedScopes.Contains(scope) == true;
 
         return Ok(new
         {

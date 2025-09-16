@@ -8,6 +8,8 @@ using OpenIddict.Server.AspNetCore;
 using System.Security.Claims;
 using AuthServer.Data.Entities;
 using AuthServer.Services;
+using Microsoft.Extensions.Options;
+using AuthServer.Configuration;
 
 namespace AuthServer.Controllers;
 
@@ -17,7 +19,8 @@ public class AuthorizationController(
     IOpenIddictScopeManager scopeManager,
     IOpenIddictTokenManager tokenManager,
     UserManager<AppUser> userManager,
-    ScopeConfigurationService scopeConfigService) : Controller
+    ScopeConfigurationService scopeConfigService,
+    IOptions<ClientConfiguration> clientConfig) : Controller
 {
     [HttpPost("~/connect/token")]
     public async Task<IActionResult> Token()
@@ -95,7 +98,7 @@ public class AuthorizationController(
 
             // Add the claims associated with the user to the identity
             identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
-            
+
             // Add profile claims and set destinations
             var nameClaim = new Claim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
             nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
@@ -111,21 +114,22 @@ public class AuthorizationController(
             var givenNameClaim = new Claim(OpenIddictConstants.Claims.GivenName, user.FirstName);
             givenNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
             identity.AddClaim(givenNameClaim);
-            
+
             var familyNameClaim = new Claim(OpenIddictConstants.Claims.FamilyName, user.LastName);
             familyNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
             identity.AddClaim(familyNameClaim);
 
             // Get user scopes based on configuration
-            var userScopes = scopeConfigService.GetUserScopes(user);
+            var userScopes = await scopeConfigService.GetUserScopesAsync(user);
+            userScopes = userScopes.Append("password").ToArray(); // Always include the openid scope
 
             // Filter requested scopes against user's allowed scopes
-            var requestedScopes = request.GetScopes();
-            var validScopes = requestedScopes.Where(scope => userScopes.Contains(scope)).ToArray();
+            // var requestedScopes = request.GetScopes();
+            // var validScopes = requestedScopes.Where(scope => userScopes.Contains(scope)).ToArray();
 
 
             // Set the list of scopes granted to the client application
-            identity.SetScopes(validScopes);
+            identity.SetScopes(userScopes);
 
             // Create a new authentication ticket holding the user identity
             var principal = new ClaimsPrincipal(identity);
@@ -146,7 +150,9 @@ public class AuthorizationController(
                     }));
             }
 
-            if (!scopeConfigService.IsValidClient(request.ClientId, request.ClientSecret))
+            // Validate client using OpenIddict application manager
+            var application = await applicationManager.FindByClientIdAsync(request.ClientId);
+            if (application == null)
             {
                 return Forbid(
                     authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
@@ -156,16 +162,19 @@ public class AuthorizationController(
                     }));
             }
 
-            // Get client configuration
-            var clientConfig = scopeConfigService.GetClientConfig(request.ClientId);
-            if (clientConfig == null)
+            // Validate client secret for confidential clients
+            var clientType = await applicationManager.GetClientTypeAsync(application);
+            if (clientType == OpenIddictConstants.ClientTypes.Confidential)
             {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidClient
-                    }));
+                if (!await applicationManager.ValidateClientSecretAsync(application, request.ClientSecret))
+                {
+                    return Forbid(
+                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+                        properties: new AuthenticationProperties(new Dictionary<string, string?>
+                        {
+                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidClient
+                        }));
+                }
             }
 
             // Create a new ClaimsIdentity containing the claims that will be used to create an id_token, a token or a code.
@@ -175,12 +184,20 @@ public class AuthorizationController(
                 roleType: OpenIddictConstants.Claims.Role);
 
             // Add the claims associated with the client application
-            identity.AddClaim(OpenIddictConstants.Claims.Subject, clientConfig.ClientId);
-            identity.AddClaim(OpenIddictConstants.Claims.Name, clientConfig.DisplayName);
+            identity.AddClaim(OpenIddictConstants.Claims.Subject, await applicationManager.GetClientIdAsync(application));
+            identity.AddClaim(OpenIddictConstants.Claims.Name, await applicationManager.GetDisplayNameAsync(application) ?? string.Empty);
 
-            // Get valid scopes for this client
+            // Get valid scopes for this client from OpenIddict
             var requestedScopes = request.GetScopes();
-            var validScopes = scopeConfigService.GetValidScopesForClient(request.ClientId, requestedScopes.ToArray());
+            var validScopes = new List<string>();
+
+            foreach (var scope in requestedScopes)
+            {
+                if (await applicationManager.HasPermissionAsync(application, OpenIddictConstants.Permissions.Prefixes.Scope + scope))
+                {
+                    validScopes.Add(scope);
+                }
+            }
 
             // Set the list of scopes granted to the client application
             identity.SetScopes(validScopes);
@@ -250,7 +267,7 @@ public class AuthorizationController(
 
             // Add the claims associated with the user to the identity
             identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
-            
+
             // Add profile claims and set destinations
             var nameClaim = new Claim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
             nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
@@ -266,7 +283,7 @@ public class AuthorizationController(
             var givenNameClaim = new Claim(OpenIddictConstants.Claims.GivenName, user.FirstName);
             givenNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
             identity.AddClaim(givenNameClaim);
-            
+
             var familyNameClaim = new Claim(OpenIddictConstants.Claims.FamilyName, user.LastName);
             familyNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
             identity.AddClaim(familyNameClaim);
@@ -274,7 +291,7 @@ public class AuthorizationController(
             // Get user scopes based on configuration (refresh tokens should maintain the same scopes)
             var originalScopes = result.Principal.GetScopes();
             var userScopes = scopeConfigService.GetUserScopes(user);
-            
+
             // Only keep scopes that the user is still authorized for
             var validScopes = originalScopes.Where(scope => userScopes.Contains(scope)).ToArray();
 
@@ -301,7 +318,7 @@ public class AuthorizationController(
         // For now, implement a simple logout that doesn't require token revocation
         // In a production system, you might want to maintain a token blacklist
         // or implement proper token revocation based on your security requirements
-        
+
         return Ok();
     }
 }

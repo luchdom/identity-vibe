@@ -1,25 +1,20 @@
+using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Validation.AspNetCore;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
+using Yarp.ReverseProxy.Transforms;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure automatic OpenTelemetry instrumentation
 builder.AddOpenTelemetryAutoInstrumentation("gateway", "1.0.0");
 
-// Add CORS
-// builder.Services.AddCors(options =>
-// {
-//     options.AddPolicy("DefaultPolicy", policy =>
-//     {
-//         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
-//         policy.WithOrigins(allowedOrigins)
-//               .AllowAnyMethod()
-//               .AllowAnyHeader()
-//               .AllowCredentials();
-//     });
-// });
 
 builder.Services.AddCors(options =>
 {
@@ -32,43 +27,38 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+})
+.AddOpenIdConnect();
 
-// Add Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        var authority = builder.Configuration["Authentication:Authority"];
-        var audience = builder.Configuration["Authentication:Audience"];
 
-        options.Authority = authority;
-        options.Audience = audience;
-        options.RequireHttpsMetadata = false; // For development only
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = false, // Keep disabled for multi-service scenarios
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = authority,
-            ClockSkew = TimeSpan.FromMinutes(5),
-            NameClaimType = "name",
-            RoleClaimType = "role"
-        };
-    });
-
-// Add Authorization
+// // Add Authorization
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("AuthenticatedUser", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-    });
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+        .Build();
 });
 
 // Add YARP
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddTransforms(builder => builder.AddRequestTransform(async context =>
+    {
+        // Attach the access token retrieved from the authentication cookie.
+        //
+        // Note: in a real world application, the expiration date of the access token
+        // should be checked before sending a request to avoid getting a 401 response.
+        // Once expired, a new access token could be retrieved using the OAuth 2.0
+        // refresh token grant (which could be done transparently).
+        var token = await context.HttpContext.GetTokenAsync("access_token");
+
+        context.ProxyRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }));;
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -79,7 +69,7 @@ builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = (context) =>
     {
         context.ProblemDetails.Instance = context.HttpContext.Request.Path;
-        
+
         // Add traceId if available
         if (context.HttpContext.Request.Headers.ContainsKey("X-Correlation-ID"))
         {

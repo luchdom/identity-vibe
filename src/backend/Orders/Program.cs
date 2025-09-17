@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Validation.AspNetCore;
 using Orders.Configuration;
 using Orders.Data;
 using Orders.Middleware;
@@ -15,7 +16,7 @@ using Shared.OpenTelemetry.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure automatic OpenTelemetry instrumentation
-builder.AddOpenTelemetryAutoInstrumentation("servicea", "1.0.0");
+builder.AddOpenTelemetryAutoInstrumentation("orders", "1.0.0");
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -26,7 +27,7 @@ builder.Services.AddProblemDetails(options =>
     options.CustomizeProblemDetails = (context) =>
     {
         context.ProblemDetails.Instance = context.HttpContext.Request.Path;
-        
+
         // Add traceId if available
         if (context.HttpContext.Request.Headers.ContainsKey("X-Correlation-ID"))
         {
@@ -60,9 +61,9 @@ builder.Services.AddDbContext<OrdersDbContext>(options =>
 // Configure CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DefaultPolicy", policy =>
+    options.AddDefaultPolicy(policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -70,30 +71,28 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Add OpenIddict validation with introspection
+builder.Services.AddOpenIddict()
+    .AddValidation(options =>
     {
-        var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5000";
-        var audience = builder.Configuration["Authentication:Audience"] ?? "https://localhost:5000";
+        // Set the issuer (AuthServer URL)
+        var authority = builder.Configuration["OpenIddict:Authority"];
+        options.SetIssuer(authority);
 
-        options.Authority = authority;
-        options.Audience = audience;
-        options.RequireHttpsMetadata = false; // For development only
-        options.IncludeErrorDetails = true; // For development debugging
-        
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = false, // Keep disabled for multi-service scenarios
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = authority,
-            ClockSkew = TimeSpan.FromMinutes(5),
-            NameClaimType = "name",
-            RoleClaimType = "role"
-        };
+        // Configure introspection for token validation
+        options.UseIntrospection()
+               .SetClientId(builder.Configuration["OpenIddict:IntrospectionClientId"])
+               .SetClientSecret(builder.Configuration["OpenIddict:IntrospectionClientSecret"]);
+
+        // Use system HttpClient
+        options.UseSystemNetHttp();
+
+        // Register the ASP.NET Core host
+        options.UseAspNetCore();
     });
+
+// Add authentication
+builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 
 // Configure authorization with configuration-driven policies
 var authService = new AuthorizationService(builder.Configuration);
@@ -149,7 +148,7 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
     await context.Database.EnsureCreatedAsync();
-    
+
     // Seed sample data
     var seeder = new DatabaseSeeder(context);
     await seeder.SeedAsync();

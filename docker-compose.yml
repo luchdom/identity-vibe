@@ -32,9 +32,11 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=postgres
       # URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL:-https://localhost:5000}
+      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL:-http://localhost:5002}
+      - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL:-http://localhost:5173}
       - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_GATEWAY_URL=http://gateway:8080
       - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=authserver
@@ -64,9 +66,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
       # URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL:-https://localhost:5000}
+      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL:-http://localhost:5002}
+      - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL:-http://localhost:5173}
       - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_GATEWAY_URL=http://gateway:8080
       - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=gateway
@@ -94,9 +98,11 @@ services:
       - ASPNETCORE_ENVIRONMENT=Docker
       - ASPNETCORE_URLS=http://+:8080
       # URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL:-https://localhost:5000}
+      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL:-http://localhost:5002}
+      - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL:-http://localhost:5173}
       - INTERNAL_AUTH_URL=http://authserver:8080
+      - INTERNAL_GATEWAY_URL=http://gateway:8080
       - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=orders

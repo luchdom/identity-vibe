@@ -26,6 +26,7 @@ builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0");
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddRazorPages();
 
 // Configure Problem Details
 builder.Services.AddProblemDetails(options =>
@@ -53,7 +54,7 @@ builder.Services.AddSwaggerGen();
 // Add CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("DefaultPolicy", policy =>
+    options.AddDefaultPolicy(policy =>
     {
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
         policy.WithOrigins(allowedOrigins)
@@ -93,6 +94,15 @@ builder.Services.AddIdentity<AppUser, AppRole>(options =>
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
+
+// Add cookie authentication for the authorization flow
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/account/login";
+    options.LogoutPath = "/connect/logout";
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
+    options.SlidingExpiration = true;
+});
 
 builder.Services.AddAuthorization(options =>
 {
@@ -136,37 +146,41 @@ builder.Services.AddOpenIddict()
     .AddServer(options =>
     {
         // Configure issuer URL from environment variable
-        var externalAuthUrl = builder.Configuration["EXTERNAL_AUTH_URL"] ?? "https://localhost:5000";
+        var externalAuthUrl = builder.Configuration["EXTERNAL_AUTH_URL"]
+                              ?? throw new ArgumentNullException("Missing EXTERNAL_AUTH_URL");
         options.SetIssuer(new Uri(externalAuthUrl));
 
+        // Configure endpoints
         options
-            .SetTokenEndpointUris("/connect/token");
+            .SetAuthorizationEndpointUris("/connect/authorize")
+            .SetTokenEndpointUris("/connect/token")
+            .SetIntrospectionEndpointUris("/connect/introspect")
+            .SetUserInfoEndpointUris("/connect/userinfo")
+            .SetEndSessionEndpointUris("/connect/logout");
 
         // Enable the required flows
-        options.AllowPasswordFlow()
+        options.AllowAuthorizationCodeFlow()
+               .RequireProofKeyForCodeExchange() // PKCE required
                .AllowClientCredentialsFlow()
                .AllowRefreshTokenFlow();
-
-        // Accept anonymous clients (i.e clients that don't send a client_id).
-        options.AcceptAnonymousClients();
 
         // Register the signing and encryption credentials
         options.AddDevelopmentEncryptionCertificate()
                .AddDevelopmentSigningCertificate();
 
         // Register the ASP.NET Core host and configure the ASP.NET Core options
-        // Configure JWT tokens
         options.UseAspNetCore()
+               .EnableAuthorizationEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
+               .EnableUserInfoEndpointPassthrough()
+               .EnableEndSessionEndpointPassthrough()
                .DisableTransportSecurityRequirement();
 
-        // Disable access token encryption for easier integration with third-party APIs
-        options.DisableAccessTokenEncryption();
+        // Use reference tokens (opaque tokens) instead of self-contained JWT
+        options.UseReferenceAccessTokens()
+               .UseReferenceRefreshTokens();
 
         // Configure scopes from configuration
-        // Note: We can't use DI here as the container isn't built yet
-        // The scopes will be properly registered from configuration during database seeding
-        // For now, register the standard OpenIddict scopes and custom scopes
         var scopesToRegister = new List<string>
         {
             OpenIddictConstants.Scopes.OpenId,
@@ -186,18 +200,6 @@ builder.Services.AddOpenIddict()
                 scopesToRegister.AddRange(customScopes.Select(s => s.Name));
             }
         }
-        else
-        {
-            // Fallback to hardcoded scopes if configuration is missing
-            scopesToRegister.AddRange(new[]
-            {
-                "orders.read", "orders.write", "orders.manage",
-                "profile.read", "profile.write",
-                "admin.manage", "admin.users", "admin.roles",
-                "gateway-bff"
-            });
-        }
-
         options.RegisterScopes(scopesToRegister.Distinct().ToArray());
     })
     .AddValidation(options =>
@@ -235,6 +237,7 @@ app.UseLoggingMiddleware();
 app.UseSerilogMiddleware();
 
 app.MapControllers();
+app.MapRazorPages();
 
 // Seed the database with default user and roles
 using (var scope = app.Services.CreateScope())

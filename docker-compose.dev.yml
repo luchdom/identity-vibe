@@ -6,8 +6,27 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
+      # Development URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_CLIENT_URL=http://localhost:5173
     volumes:
       - ./src/backend/AuthServer:/app
+      - /app/bin
+      - /app/obj
+    command: dotnet watch run --urls http://+:80
+
+  # Gateway with development settings
+  gateway:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      # Development URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_CLIENT_URL=http://localhost:5173
+    volumes:
+      - ./src/backend/Gateway:/app
       - /app/bin
       - /app/obj
     command: dotnet watch run --urls http://+:80
@@ -17,6 +36,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
+      # Development URL Configuration
+      - EXTERNAL_AUTH_URL=https://localhost:5000
+      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_CLIENT_URL=http://localhost:5173
     volumes:
       - ./src/backend/Orders:/app
       - /app/bin
@@ -29,11 +52,12 @@ services:
       context: ./src/client
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "5173:5173"
     volumes:
       - ./src/client:/app
       - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - REACT_APP_API_BASE_URL=http://localhost:5002
-    command: npm start 
+      - VITE_GATEWAY_URL=http://localhost:5002
+      - VITE_AUTH_URL=https://localhost:5000
+    command: npm run dev -- --host 0.0.0.0 --port 5173 

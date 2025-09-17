@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { authApi, type User } from '@/lib/auth-api';
+import OAuth2Auth from '@/lib/oauth2-auth';
 
 export interface AuthState {
   user: User | null;
@@ -10,9 +11,10 @@ export interface AuthState {
 }
 
 export interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (userOrEmail: User | string, passwordOrToken?: string) => Promise<{ success: boolean; error?: string }> | void;
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<boolean>;
+  authorize: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,33 +30,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated: false,
   });
 
+  // Refresh access token
+  const refreshAccessToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const result = await OAuth2Auth.refreshToken();
+      return !!result.accessToken;
+    } catch (error) {
+      console.error('Failed to refresh token:', error);
+      return false;
+    }
+  }, []);
+
   // Initialize auth state from stored data
   const initializeAuth = useCallback(async () => {
     try {
-      const { accessToken } = authApi.getStoredTokens();
-      const storedUser = authApi.getStoredUser();
+      const accessToken = OAuth2Auth.getAccessToken();
+      const storedUser = OAuth2Auth.getUser();
 
       if (accessToken && storedUser) {
+        setAuthState({
+          user: storedUser,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+
+        // Optionally verify token is still valid
         try {
-          // Verify token is still valid by fetching user profile
           const serverUser = await authApi.getProfile();
-          
           setAuthState({
             user: serverUser,
             isAuthenticated: true,
             isLoading: false,
           });
-          
-          // Update stored user data if server returned updated info
           localStorage.setItem('user', JSON.stringify(serverUser));
         } catch (error) {
-          // Token is invalid, clear storage
-          authApi.clearAuthData();
-          setAuthState({
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-          });
+          // Token might be expired, try to refresh
+          const refreshed = await refreshAccessToken();
+          if (!refreshed) {
+            OAuth2Auth.logout();
+            setAuthState({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
         }
       } else {
         setAuthState({
@@ -64,83 +83,56 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
       }
     } catch (error) {
-      authApi.clearAuthData();
       setAuthState({
         user: null,
         isAuthenticated: false,
         isLoading: false,
       });
     }
-  }, []);
+  }, [refreshAccessToken]);
 
-  // Login function
-  const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    
-    try {
-      const authData = await authApi.login({ email, password });
-      
-      // Store tokens and user data using AuthApi
-      authApi.storeAuthData(authData);
-      
+  // Login function - supports both OAuth2 callback and direct login
+  const login = useCallback((userOrEmail: User | string, passwordOrToken?: string): Promise<{ success: boolean; error?: string }> | void => {
+    // OAuth2 callback login (user object and token provided)
+    if (typeof userOrEmail === 'object' && passwordOrToken) {
       setAuthState({
-        user: authData.user,
+        user: userOrEmail,
         isAuthenticated: true,
         isLoading: false,
       });
-
-      return { success: true };
-    } catch (error: any) {
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { 
-        success: false, 
-        error: error?.response?.data?.message || error?.message || 'Login failed' 
-      };
+      return;
     }
+
+    // Direct password login (deprecated - will be removed)
+    if (typeof userOrEmail === 'string' && passwordOrToken) {
+      // For now, just redirect to OAuth2 flow
+      authorize();
+      return Promise.resolve({ success: false, error: 'Please use the OAuth2 login flow' });
+    }
+
+    return Promise.resolve({ success: false, error: 'Invalid login parameters' });
+  }, []);
+
+  // Initiate OAuth2 authorization flow
+  const authorize = useCallback(() => {
+    // Save current URL for redirect after auth
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/callback') {
+      sessionStorage.setItem('returnUrl', window.location.pathname);
+    }
+    OAuth2Auth.authorize();
   }, []);
 
   // Logout function
   const logout = useCallback(async (): Promise<void> => {
-    try {
-      // Call logout endpoint using AuthApi
-      await authApi.logout();
-    } catch (error) {
-      // Continue with logout even if API call fails
-      console.warn('Logout API call failed:', error);
-    }
-    
-    // Clear stored tokens and state using AuthApi
-    authApi.clearAuthData();
     setAuthState({
       user: null,
       isAuthenticated: false,
       isLoading: false,
     });
+
+    // Use OAuth2 logout which handles everything
+    await OAuth2Auth.logout();
   }, []);
-
-  // Refresh access token
-  const refreshAccessToken = useCallback(async (): Promise<boolean> => {
-    const { refreshToken } = authApi.getStoredTokens();
-    
-    if (!refreshToken) {
-      return false;
-    }
-
-    try {
-      const response = await authApi.refreshTokens({ refreshToken });
-      
-      // Update tokens using AuthApi
-      localStorage.setItem('accessToken', response.accessToken);
-      if (response.refreshToken) {
-        localStorage.setItem('refreshToken', response.refreshToken);
-      }
-
-      return true;
-    } catch (error) {
-      await logout();
-      return false;
-    }
-  }, [logout]);
 
   // Initialize on mount
   useEffect(() => {
@@ -152,6 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     refreshAccessToken,
+    authorize,
   };
 
   return (

@@ -27,6 +27,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="System.Linq.Async" Version="6.0.1" />
 
     <!-- OpenTelemetry packages -->
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />

@@ -17,6 +17,12 @@ public class AccountController(
     IAuthenticationService authenticationService,
     IUserService userService) : ControllerBase
 {
+    [HttpGet("health")]
+    [AllowAnonymous]
+    public IActionResult Health()
+    {
+        return Ok(new { status = "healthy", service = "authserver", timestamp = DateTime.UtcNow });
+    }
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)

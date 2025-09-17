@@ -15,7 +15,8 @@ public class DatabaseSeeder(
     IOpenIddictApplicationManager applicationManager,
     IOpenIddictScopeManager scopeManager,
     IOptions<ScopeConfiguration> scopeConfig,
-    IOptions<ClientConfiguration> clientConfig)
+    IOptions<ClientConfiguration> clientConfig,
+    IConfiguration configuration)
 {
     public async Task SeedAsync()
     {
@@ -324,16 +325,18 @@ public class DatabaseSeeder(
             descriptor.Permissions.Add(OpenIddictConstants.Permissions.Prefixes.Scope + scope);
         }
 
-        // Add redirect URIs
+        // Add redirect URIs with environment variable replacement
         foreach (var uri in clientSettings.RedirectUris ?? new())
         {
-            descriptor.RedirectUris.Add(new Uri(uri));
+            var resolvedUri = ReplaceUrlTokens(uri);
+            descriptor.RedirectUris.Add(new Uri(resolvedUri));
         }
 
-        // Add post-logout redirect URIs
+        // Add post-logout redirect URIs with environment variable replacement
         foreach (var uri in clientSettings.PostLogoutRedirectUris ?? new())
         {
-            descriptor.PostLogoutRedirectUris.Add(new Uri(uri));
+            var resolvedUri = ReplaceUrlTokens(uri);
+            descriptor.PostLogoutRedirectUris.Add(new Uri(resolvedUri));
         }
 
         // Handle PKCE requirement
@@ -353,5 +356,19 @@ public class DatabaseSeeder(
         await applicationManager.DeleteAsync(existingClient);
         await CreateClientFromConfigAsync(clientSettings);
         logger.LogInformation("Updated client: {ClientId} ({DisplayName})", clientSettings.ClientId, clientSettings.DisplayName);
+    }
+
+    private string ReplaceUrlTokens(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+
+        return value
+            .Replace("${EXTERNAL_AUTH_URL}", configuration["EXTERNAL_AUTH_URL"] ?? "https://localhost:5000")
+            .Replace("${EXTERNAL_GATEWAY_URL}", configuration["EXTERNAL_GATEWAY_URL"] ?? "http://localhost:5002")
+            .Replace("${EXTERNAL_CLIENT_URL}", configuration["EXTERNAL_CLIENT_URL"] ?? "http://localhost:5173")
+            .Replace("${INTERNAL_AUTH_URL}", configuration["INTERNAL_AUTH_URL"] ?? "http://authserver:8080")
+            .Replace("${INTERNAL_GATEWAY_URL}", configuration["INTERNAL_GATEWAY_URL"] ?? "http://gateway:8080")
+            .Replace("${INTERNAL_ORDERS_URL}", configuration["INTERNAL_ORDERS_URL"] ?? "http://orders:8080");
     }
 }

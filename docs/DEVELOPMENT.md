@@ -4,7 +4,7 @@ This document covers detailed development setup, common issues, and troubleshoot
 
 <prerequisites>
 - .NET 8 SDK
-- Node.js 18+ and pnpm
+- Node.js 18+ and npm
 - Docker and Docker Compose
 - Git
 </prerequisites>
@@ -20,8 +20,8 @@ dotnet restore ArchZ.sln
 dotnet build ArchZ.sln
 
 # Setup frontend
-cd src/client
-pnpm install
+cd src/web-admin
+npm install
 cd ../..
 </code_example>
 </setup_instructions>
@@ -31,11 +31,11 @@ cd ../..
 #### Option 1: Recommended for AI Development
 <code_example language="bash">
 # Backend services in Docker
-docker-compose up --build postgres authserver gateway servicea
+docker-compose up --build postgres authserver gateway orders
 
 # Frontend locally (separate terminal)
-cd src/client
-pnpm dev
+cd src/web-admin
+npm run dev
 </code_example>
 
 #### Option 2: Full Local Development
@@ -56,8 +56,8 @@ cd src/backend/Orders
 dotnet run
 
 # Terminal 4: Frontend
-cd src/client
-pnpm dev
+cd src/web-admin
+npm run dev
 </code_example>
 
 #### Option 3: Full Docker
@@ -69,7 +69,7 @@ docker-compose up --build
 
 <service_urls>
 ### Development URLs
-- **Frontend**: http://localhost:5173 (Vite dev server)
+- **Frontend**: http://localhost:3000 (Next.js dev server)
 - **Gateway**: http://localhost:5002 (BFF - Main API endpoint)
 - **AuthServer**: http://localhost:5000 (OAuth2/OIDC)
 - **Orders**: http://localhost:5003 (Resource API)
@@ -103,19 +103,20 @@ dotnet ef migrations list
 ### Frontend Development
 <code_example language="bash">
 # Install new package
-cd src/client
-pnpm add package-name
+cd src/web-admin
+npm install package-name
 
 # Add shadcn/ui component
 npx shadcn@latest add button
 
-# Run tests
-pnpm test              # Unit tests
-npx playwright test    # E2E tests
-npx playwright test --ui  # E2E tests with UI
+# Run quality checks
+npm run lint              # Linting & static analysis
+npx tsc --noEmit          # TypeScript type checking
+npx playwright test       # End-to-end tests
+npx playwright test --ui  # Playwright UI mode
 
 # Build for production
-pnpm build
+npm run build
 </code_example>
 
 ### Backend Development
@@ -158,7 +159,7 @@ curl -X POST http://localhost:5002/auth/refresh \
 3. Check CORS configuration:
 <code_example language="bash">
 # Browser Network tab should show CORS headers
-Access-Control-Allow-Origin: http://localhost:5173
+Access-Control-Allow-Origin: http://localhost:3000
 Access-Control-Allow-Credentials: true
 </code_example>
 
@@ -217,25 +218,25 @@ volumes:
 #### Build Failures
 <code_example language="bash">
 # Clear node_modules and reinstall
-cd src/client
-rm -rf node_modules pnpm-lock.yaml
-pnpm install
+cd src/web-admin
+rm -rf node_modules package-lock.json
+npm install
 
-# Clear Vite cache
-rm -rf .vite
-pnpm dev
+# Clear Next.js build cache
+rm -rf .next
+npm run dev
 </code_example>
 
 #### Hot Reload Not Working
-<code_example language="typescript">
-# Check Vite config for host binding
-# vite.config.ts should have:
-export default defineConfig({
-  server: {
-    host: true,  // Bind to all addresses
-    port: 5173
-  }
-})
+<code_example language="bash">
+# Clear Next.js cache and restart the dev server
+rm -rf .next
+npm run dev
+
+# Enable file watching when developing via Docker/WSL
+SET WATCHPACK_POLLING=true     # Windows PowerShell
+export WATCHPACK_POLLING=true  # macOS/Linux
+HOST=0.0.0.0 PORT=3000 npm run dev
 </code_example>
 
 #### TypeScript Errors
@@ -250,13 +251,13 @@ Ctrl+Shift+P -> "TypeScript: Restart TS Server"
 }
 
 # Check for missing dependencies
-pnpm install
+npm install
 
 # Type check without emitting files
 npx tsc --noEmit
 
 # Clear TypeScript cache
-rm -rf node_modules/.cache/.tsbuildinfo
+rm -rf .next/cache/typescript
 </code_example>
 
 #### Clean Architecture Issues
@@ -447,8 +448,8 @@ ORDER BY mean_exec_time DESC;
 #### Frontend Bundle Size
 <code_example language="bash">
 # Analyze bundle
-cd src/client
-pnpm build
+cd src/web-admin
+npm run build
 npx vite-bundle-analyzer dist
 
 # Check for large dependencies
@@ -503,21 +504,17 @@ dotnet watch test
 
 #### Frontend Testing
 <code_example language="bash">
-# Unit tests with Jest/Vitest
-cd src/client
-pnpm test
+# Frontend quality checks
+cd src/web-admin
 
-# Unit tests in watch mode
-pnpm test:watch
+# Linting
+npm run lint
 
-# Coverage report
-pnpm test:coverage
+# Type checking
+npx tsc --noEmit
 
-# Component testing with React Testing Library
-pnpm test -- --testPathPattern=components
-
-# Specific test file
-pnpm test -- UserAuthForm.test.tsx
+# Run Playwright E2E tests locally
+npx playwright test
 </code_example>
 
 #### End-to-End Testing with Playwright
@@ -587,14 +584,14 @@ SELECT COUNT(*) FROM \"AspNetUsers\" WHERE \"Email\" = 'admin@example.com';
 ### Code Quality
 <code_example language="bash">
 # Format code
-cd src/client
-pnpm format
+cd src/web-admin
+npm run lint -- --fix
 
 # Lint code
-pnpm lint
+npm run lint
 
 # Type check
-pnpm type-check
+npx tsc --noEmit
 
 # .NET format
 dotnet format ArchZ.sln
@@ -603,8 +600,8 @@ dotnet format ArchZ.sln
 ### Pre-commit Hooks
 <code_example language="bash">
 # Install husky for git hooks
-cd src/client
-pnpm add --save-dev husky lint-staged
+cd src/web-admin
+npm install --save-dev husky lint-staged
 
 # Add to package.json
 {

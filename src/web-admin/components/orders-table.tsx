@@ -191,7 +191,7 @@ export function OrdersTable({
         <TableHeader>
           {({ headerGroup }) => (
             <TableHeaderGroup headerGroup={headerGroup}>
-              {({ header }) => <TableHead key={header.id} header={header} />}
+              {({ header }) => <TableHead header={header} />}
             </TableHeaderGroup>
           )}
         </TableHeader>

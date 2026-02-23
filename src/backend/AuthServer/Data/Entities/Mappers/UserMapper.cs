@@ -12,8 +12,6 @@ public static class UserMapper
         {
             Id = entity.Id,
             Email = entity.Email ?? string.Empty,
-            FirstName = entity.FirstName,
-            LastName = entity.LastName,
             Roles = roles?.ToArray() ?? [],
             IsActive = entity.IsActive,
             CreatedAt = entity.CreatedAt
@@ -27,8 +25,6 @@ public static class UserMapper
             Id = domain.Id,
             Email = domain.Email,
             UserName = domain.Email,
-            FirstName = domain.FirstName,
-            LastName = domain.LastName,
             IsActive = domain.IsActive,
             CreatedAt = domain.CreatedAt,
             EmailConfirmed = true

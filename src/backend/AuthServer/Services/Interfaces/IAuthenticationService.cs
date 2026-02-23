@@ -1,10 +1,10 @@
 using AuthServer.Models.Commands;
-using AuthServer.Models.ViewModels;
-using Shared.Common;
+using AuthServer.Models.Results;
 
 namespace AuthServer.Services.Interfaces;
 
 public interface IAuthenticationService
 {
-    Task<Result<RegistrationDataViewModel>> RegisterAsync(RegisterUserCommand command);
+    Task<LoginResult> LoginAsync(LoginCommand command);
+    Task<RegisterResult> RegisterAsync(RegisterCommand command);
 }

@@ -9,7 +9,5 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
     public void Configure(EntityTypeBuilder<AppUser> builder)
     {
         builder.HasIndex(e => e.Email).IsUnique();
-        builder.Property(e => e.FirstName).HasMaxLength(100);
-        builder.Property(e => e.LastName).HasMaxLength(100);
     }
 }

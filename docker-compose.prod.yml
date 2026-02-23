@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -100,13 +98,14 @@ services:
   # React Client
   client:
     build:
-      context: ./src/client
+      context: ./src/web-admin
       dockerfile: Dockerfile
     environment:
-      - VITE_GATEWAY_URL=${EXTERNAL_GATEWAY_URL}
-      - VITE_AUTH_URL=${EXTERNAL_AUTH_URL}
+      - NEXT_PUBLIC_API_BASE_URL=${EXTERNAL_GATEWAY_URL}
+      - NEXT_PUBLIC_AUTH_URL=${EXTERNAL_AUTH_URL}
+      - NEXT_PUBLIC_APP_BASE_URL=${EXTERNAL_CLIENT_URL}
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
       - gateway
     networks:
@@ -118,4 +117,4 @@ volumes:
 
 networks:
   identity-network:
-    driver: bridge 
+    driver: bridge

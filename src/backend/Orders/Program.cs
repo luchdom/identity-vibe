@@ -10,6 +10,7 @@ using Orders.Repositories;
 using Orders.Repositories.Interfaces;
 using Orders.Services;
 using Orders.Services.Interfaces;
+using Shared.Authorization.Extensions;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 
@@ -40,7 +41,6 @@ builder.Services.AddProblemDetails(options =>
     };
 });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -64,43 +64,44 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
     {
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        policy.SetIsOriginAllowed(origin => new Uri(origin).IsLoopback)
+            .WithOrigins(allowedOrigins)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
-// Add OpenIddict validation with introspection
+// Add OpenIddict validation with local JWT validation
 builder.Services.AddOpenIddict()
     .AddValidation(options =>
     {
         // Set the issuer (AuthServer URL)
-        var authority = builder.Configuration["OpenIddict:Authority"];
+        var authority = builder.Configuration["Authentication:Authority"]
+                        ??  throw new ArgumentNullException("Authentication:Authority");
         options.SetIssuer(authority);
 
-        // Configure introspection for token validation
-        options.UseIntrospection()
-               .SetClientId(builder.Configuration["OpenIddict:IntrospectionClientId"])
-               .SetClientSecret(builder.Configuration["OpenIddict:IntrospectionClientSecret"]);
-
-        // Use system HttpClient
-        options.UseSystemNetHttp();
+        options.Configure(options => options.TokenValidationParameters.ValidateAudience = false);
 
         // Register the ASP.NET Core host
         options.UseAspNetCore();
+
+        // Configure caching for discovery document
+        options.UseSystemNetHttp()
+               .SetProductInformation(typeof(Program).Assembly);
+
+        // NO call to UseIntrospection() = Local JWT validation
     });
 
 // Add authentication
 builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 
-// Configure authorization with configuration-driven policies
-var authService = new AuthorizationService(builder.Configuration);
-authService.RegisterPolicies(builder.Services);
+// Configure authorization with configurable policies
+builder.Services.AddConfigurablePolicies(builder.Configuration);
 
 // Configure options
 builder.Services.Configure<AuthConfiguration>(
-    builder.Configuration.GetSection("Auth"));
+    builder.Configuration.GetSection("Authentication"));
 
 // Clean Architecture Services
 builder.Services.AddScoped<IOrdersService, OrdersService>();
@@ -112,8 +113,6 @@ builder.Services.AddScoped<IOrdersRepository, OrdersRepository>();
 // Add logging services
 builder.Services.AddLoggingServices();
 
-// Add automatic OpenTelemetry filters for business context
-builder.Services.AddOpenTelemetryFilters();
 
 var app = builder.Build();
 
@@ -128,7 +127,7 @@ app.UseHttpsRedirection();
 
 // Problem Details middleware is enabled automatically with AddProblemDetails()
 
-app.UseCors("DefaultPolicy");
+app.UseCors();
 
 // Add OpenTelemetry middleware
 app.UseOpenTelemetryMiddleware();
@@ -155,5 +154,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.MapControllers();
+
+// Health check endpoint (anonymous - no auth required)
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+    .AllowAnonymous();
 
 app.Run();

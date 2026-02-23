@@ -16,6 +16,9 @@ const getOrCreateCorrelationId = (): string => {
   return correlationId;
 };
 
+// Session expired event emitter
+export const authEvents = new EventTarget();
+
 export const correlationId = {
   generate: generateCorrelationId,
   getCurrent: getOrCreateCorrelationId,
@@ -105,15 +108,14 @@ api.interceptors.response.use(
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Refresh failed, clear auth data and redirect
+        // Refresh failed, clear auth data and emit session expired event
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        
-        // Only redirect if not already on login page
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+
+        // Emit session expired event for the AuthProvider to handle
+        authEvents.dispatchEvent(new CustomEvent('sessionExpired'));
+
         return Promise.reject(refreshError);
       }
     }

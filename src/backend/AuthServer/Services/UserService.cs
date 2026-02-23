@@ -28,8 +28,6 @@ public class UserService(
             {
                 Id = userViewModel.Id,
                 Email = userViewModel.Email,
-                FirstName = userViewModel.FirstName,
-                LastName = userViewModel.LastName,
                 Roles = roles.ToArray(),
                 IsActive = userViewModel.IsActive,
                 CreatedAt = userViewModel.CreatedAt
@@ -63,8 +61,6 @@ public class UserService(
             {
                 Id = userViewModel.Id,
                 Email = userViewModel.Email,
-                FirstName = userViewModel.FirstName,
-                LastName = userViewModel.LastName,
                 Roles = roles.ToArray(),
                 IsActive = userViewModel.IsActive,
                 CreatedAt = userViewModel.CreatedAt

@@ -16,6 +16,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		docker-compose.prod.yml = docker-compose.prod.yml
 		docker-compose.yml = docker-compose.yml
 		README.md = README.md
+		.env = .env
+		.env.development = .env.development
+		.env.example = .env.example
+		.env.production = .env.production
+		.env.staging = .env.staging
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "src\backend\Shared\Shared.csproj", "{99F4F38D-4911-4AF2-B150-1C4D07C6F485}"

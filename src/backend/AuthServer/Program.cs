@@ -13,6 +13,7 @@ using OpenIddict.Validation.AspNetCore;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 using Microsoft.Extensions.Options;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,12 +22,12 @@ builder.Configuration.AddJsonFile("appsettings.Scopes.json", optional: false, re
 // Load client configuration
 builder.Configuration.AddJsonFile("appsettings.Clients.json", optional: false, reloadOnChange: true);
 
+// Add automatic OpenTelemetry filters for business context
 // Configure automatic OpenTelemetry instrumentation
-builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0");
+builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0", dbTelemetry: true);
 
 // Add services to the container.
-builder.Services.AddControllers();
-builder.Services.AddRazorPages();
+builder.Services.AddControllersWithViews();
 
 // Configure Problem Details
 builder.Services.AddProblemDetails(options =>
@@ -58,9 +59,10 @@ builder.Services.AddCors(options =>
     {
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
         policy.WithOrigins(allowedOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+            .SetIsOriginAllowed(origin => new Uri(origin).IsLoopback)
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
 
@@ -68,14 +70,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (builder.Environment.EnvironmentName == "Docker")
-    {
-        options.UseNpgsql(connectionString);
-    }
-    else
-    {
-        options.UseSqlite(connectionString);
-    }
+   options.UseNpgsql(connectionString);
+
     // Register OpenIddict entities
     options.UseOpenIddict();
 });
@@ -98,7 +94,7 @@ builder.Services.AddIdentity<AppUser, AppRole>(options =>
 // Add cookie authentication for the authorization flow
 builder.Services.ConfigureApplicationCookie(options =>
 {
-    options.LoginPath = "/account/login";
+    options.LoginPath = "/Account/Login";
     options.LogoutPath = "/connect/logout";
     options.ExpireTimeSpan = TimeSpan.FromMinutes(50);
     options.SlidingExpiration = true;
@@ -133,8 +129,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 // Add logging services
 builder.Services.AddLoggingServices();
 
-// Add automatic OpenTelemetry filters for business context
-builder.Services.AddOpenTelemetryFilters();
+
 
 // Add OpenIddict
 builder.Services.AddOpenIddict()
@@ -145,11 +140,6 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
-        // Configure issuer URL from environment variable
-        var externalAuthUrl = builder.Configuration["EXTERNAL_AUTH_URL"]
-                              ?? throw new ArgumentNullException("Missing EXTERNAL_AUTH_URL");
-        options.SetIssuer(new Uri(externalAuthUrl));
-
         // Configure endpoints
         options
             .SetAuthorizationEndpointUris("/connect/authorize")
@@ -176,9 +166,21 @@ builder.Services.AddOpenIddict()
                .EnableEndSessionEndpointPassthrough()
                .DisableTransportSecurityRequirement();
 
-        // Use reference tokens (opaque tokens) instead of self-contained JWT
-        options.UseReferenceAccessTokens()
-               .UseReferenceRefreshTokens();
+        // Use self-contained JWT access tokens for local validation
+        // Keep reference refresh tokens for security
+
+        if(builder.Environment.IsProduction())
+        {
+            options.DisableAccessTokenEncryption()
+                .SetAccessTokenLifetime(TimeSpan.FromMinutes(10))
+                .SetRefreshTokenLifetime(TimeSpan.FromMinutes(60));
+        }
+        else
+        {
+            options.DisableAccessTokenEncryption()
+                .SetAccessTokenLifetime(TimeSpan.FromDays(30))
+                .SetRefreshTokenLifetime(TimeSpan.FromDays(30));
+        }
 
         // Configure scopes from configuration
         var scopesToRegister = new List<string>
@@ -219,25 +221,22 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// Problem Details middleware is enabled automatically with AddProblemDetails()
+app.UseStaticFiles();
 
 app.UseRouting();
-
-app.UseCors("DefaultPolicy");
+app.UseCors();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Add OpenTelemetry middleware
 app.UseOpenTelemetryMiddleware();
 
 // Add logging middleware
 app.UseLoggingMiddleware();
 app.UseSerilogMiddleware();
 
+app.MapDefaultControllerRoute();
 app.MapControllers();
-app.MapRazorPages();
 
 // Seed the database with default user and roles
 using (var scope = app.Services.CreateScope())
@@ -245,5 +244,9 @@ using (var scope = app.Services.CreateScope())
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
 }
+
+// Health check endpoint (anonymous - no auth required)
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+    .AllowAnonymous();
 
 app.Run();

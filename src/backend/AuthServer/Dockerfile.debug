@@ -1,0 +1,29 @@
+# Debug Dockerfile with debugger support
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 443
+# Install debugger
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Visual Studio Debugger
+RUN curl -sSL https://aka.ms/getvsdbgsh | bash /dev/stdin -v latest -l /vsdbg
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["src/backend/AuthServer/AuthServer.csproj", "AuthServer/"]
+COPY ["src/backend/Shared/Shared.csproj", "Shared/"]
+RUN dotnet restore "AuthServer/AuthServer.csproj"
+COPY src/backend/ .
+WORKDIR "/src/AuthServer"
+RUN dotnet build "AuthServer.csproj" -c Debug -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "AuthServer.csproj" -c Debug -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "AuthServer.dll"]

@@ -45,33 +45,28 @@ public class DatabaseSeeder(
 
     private async Task SeedRolesAsync()
     {
-        var roles = new[]
-        {
-            new { Name = "Admin", Description = "Administrator role with full access" },
-            new { Name = "User", Description = "Standard user role" },
-            new { Name = "Service", Description = "Service-to-service role" }
-        };
+        var roles = scopeConfig.Value.UserScopes.RoleScopes;
 
         foreach (var roleInfo in roles)
         {
-            if (!await roleManager.RoleExistsAsync(roleInfo.Name))
+            if (!await roleManager.RoleExistsAsync(roleInfo.Key))
             {
                 var role = new AppRole
                 {
-                    Name = roleInfo.Name,
-                    Description = roleInfo.Description,
+                    Name = roleInfo.Key,
+                    Description = roleInfo.Key,
                     IsActive = true
                 };
 
                 var result = await roleManager.CreateAsync(role);
                 if (result.Succeeded)
                 {
-                    logger.LogInformation("Created role: {RoleName}", roleInfo.Name);
+                    logger.LogInformation("Created role: {RoleName}", role.Name);
                 }
                 else
                 {
                     logger.LogError("Failed to create role {RoleName}: {Errors}",
-                        roleInfo.Name, string.Join(", ", result.Errors.Select(e => e.Description)));
+                        role.Name, string.Join(", ", result.Errors.Select(e => e.Description)));
                 }
             }
         }
@@ -83,8 +78,6 @@ public class DatabaseSeeder(
         await SeedUserAsync(
             email: "admin@example.com",
             password: "Admin123!",
-            firstName: "John",
-            lastName: "Administrator",
             role: "Admin",
             phoneNumber: "+1234567890");
 
@@ -92,13 +85,11 @@ public class DatabaseSeeder(
         await SeedUserAsync(
             email: "user@example.com",
             password: "User123!",
-            firstName: "Jane",
-            lastName: "User",
             role: "User",
             phoneNumber: "+1234567891");
     }
 
-    private async Task SeedUserAsync(string email, string password, string firstName, string lastName, string role, string phoneNumber)
+    private async Task SeedUserAsync(string email, string password, string role, string phoneNumber)
     {
         var user = await userManager.FindByEmailAsync(email);
         if (user == null)
@@ -107,8 +98,6 @@ public class DatabaseSeeder(
             {
                 UserName = email,
                 Email = email,
-                FirstName = firstName,
-                LastName = lastName,
                 PhoneNumber = phoneNumber,
                 EmailConfirmed = true,
                 PhoneNumberConfirmed = true,
@@ -132,16 +121,6 @@ public class DatabaseSeeder(
         {
             // Update existing user with additional fields if they're missing
             bool updated = false;
-            if (string.IsNullOrEmpty(user.FirstName))
-            {
-                user.FirstName = firstName;
-                updated = true;
-            }
-            if (string.IsNullOrEmpty(user.LastName))
-            {
-                user.LastName = lastName;
-                updated = true;
-            }
             if (string.IsNullOrEmpty(user.PhoneNumber))
             {
                 user.PhoneNumber = phoneNumber;
@@ -366,7 +345,7 @@ public class DatabaseSeeder(
         return value
             .Replace("${EXTERNAL_AUTH_URL}", configuration["EXTERNAL_AUTH_URL"] ?? "https://localhost:5000")
             .Replace("${EXTERNAL_GATEWAY_URL}", configuration["EXTERNAL_GATEWAY_URL"] ?? "http://localhost:5002")
-            .Replace("${EXTERNAL_CLIENT_URL}", configuration["EXTERNAL_CLIENT_URL"] ?? "http://localhost:5173")
+            .Replace("${EXTERNAL_CLIENT_URL}", configuration["EXTERNAL_CLIENT_URL"] ?? "http://localhost:3000")
             .Replace("${INTERNAL_AUTH_URL}", configuration["INTERNAL_AUTH_URL"] ?? "http://authserver:8080")
             .Replace("${INTERNAL_GATEWAY_URL}", configuration["INTERNAL_GATEWAY_URL"] ?? "http://gateway:8080")
             .Replace("${INTERNAL_ORDERS_URL}", configuration["INTERNAL_ORDERS_URL"] ?? "http://orders:8080");

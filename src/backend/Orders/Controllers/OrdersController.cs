@@ -19,19 +19,10 @@ public class OrdersController(
     IIdempotencyService idempotencyService) : ControllerBase
 {
     /// <summary>
-    /// Health check endpoint
-    /// </summary>
-    [HttpGet("health")]
-    [AllowAnonymous]
-    public IActionResult Health()
-    {
-        return Ok(new { status = "healthy", service = "orders", timestamp = DateTime.UtcNow });
-    }
-    /// <summary>
     /// Creates a new order (idempotent)
     /// </summary>
     [HttpPost]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.write")]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -73,7 +64,7 @@ public class OrdersController(
     /// Gets orders for the current user with pagination
     /// </summary>
     [HttpGet]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.read")]
     public async Task<IActionResult> GetOrders(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -103,7 +94,7 @@ public class OrdersController(
     /// Gets all orders (admin only) with pagination
     /// </summary>
     [HttpGet("all")]
-    [Authorize(Policy = "ServiceIdentityDelete")]
+    [Authorize(Policy = "orders.manage")]
     public async Task<IActionResult> GetAllOrders(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
@@ -128,7 +119,7 @@ public class OrdersController(
     /// Gets a specific order by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.read")]
     public async Task<IActionResult> GetOrderById(int id)
     {
         var userId = HttpContext.GetUserId();
@@ -153,7 +144,7 @@ public class OrdersController(
     /// Updates an existing order (idempotent)
     /// </summary>
     [HttpPut("{id:int}")]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.write")]
     public async Task<IActionResult> UpdateOrder(int id, [FromBody] UpdateOrderRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -195,7 +186,7 @@ public class OrdersController(
     /// Cancels an order (idempotent)
     /// </summary>
     [HttpPost("{id:int}/cancel")]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.write")]
     public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderRequest? request = null)
     {
         var userId = HttpContext.GetUserId();
@@ -238,7 +229,7 @@ public class OrdersController(
     /// Gets order status and history
     /// </summary>
     [HttpGet("{id:int}/status")]
-    [Authorize(Policy = "UserIdentity")]
+    [Authorize(Policy = "orders.read")]
     public async Task<IActionResult> GetOrderStatus(int id)
     {
         var userId = HttpContext.GetUserId();
@@ -263,8 +254,7 @@ public class OrdersController(
     /// Updates order status (admin only)
     /// </summary>
     [HttpPost("{id:int}/status")]
-    [AllowAnonymous]
-    [Authorize(Policy = "ServiceIdentityUpdate")]
+    [Authorize(Policy = "orders.manage")]
     public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
     {
         var userId = HttpContext.GetUserId();
@@ -288,7 +278,7 @@ public class OrdersController(
     /// Adds tracking number to an order (admin only)
     /// </summary>
     [HttpPost("{id:int}/tracking")]
-    [Authorize(Policy = "ServiceIdentityUpdate")]
+    [Authorize(Policy = "orders.manage")]
     public async Task<IActionResult> AddTrackingNumber(int id, [FromBody] AddTrackingNumberRequest request)
     {
         var userId = HttpContext.GetUserId();

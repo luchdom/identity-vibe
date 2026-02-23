@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Identity Server</title>
+
+    <!-- Global Styles -->
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+
+    <!-- Page-Specific Styles -->
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body class="@ViewData["BodyClass"]">
+    <!-- Main Content Area -->
+    <main role="main">
+        @RenderBody()
+    </main>
+
+    <!-- Global Scripts -->
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    <!-- Page-Specific Scripts -->
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

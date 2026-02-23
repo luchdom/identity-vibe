@@ -1,12 +1,38 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
+const ORDERS_ROUTE = '/orders';
+
+const dismissNextOverlay = async (page: Page) => {
+  await page.addStyleTag({
+    content: '[data-nextjs-dev-overlay], nextjs-portal { display: none !important; pointer-events: none !important; }',
+  }).catch(() => {});
+
+  await page
+    .evaluate(() => {
+      document
+        .querySelectorAll('[data-nextjs-dev-overlay], nextjs-portal')
+        .forEach((el) => {
+          el.remove();
+        });
+    })
+    .catch(() => {});
+};
 
 test.describe('Orders Page', () => {
   test.beforeEach(async ({ page }) => {
     // Mock API calls to prevent actual backend calls during testing
-    await page.route('**/orders', async route => {
-      const url = route.request().url();
-      
-      if (url.includes('/orders/all')) {
+    await page.route((url) => {
+      const requestUrl = typeof url === 'string' ? url : url.href;
+      return requestUrl.includes('localhost:5002') && requestUrl.includes('/orders');
+    }, async route => {
+      if (route.request().resourceType() === 'document') {
+        return route.continue();
+      }
+      const requestUrl = route.request().url();
+
+      if (requestUrl.includes('/orders/all')) {
         // Mock admin orders response
         await route.fulfill({
           contentType: 'application/json',
@@ -70,6 +96,24 @@ test.describe('Orders Page', () => {
     });
 
     // Mock auth profile endpoint
+    await page.route('**/connect/userinfo', async route => {
+      if (route.request().resourceType() === 'document') {
+        return route.continue();
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-id',
+          email: 'admin@example.com',
+          firstName: 'Admin',
+          lastName: 'User',
+          roles: ['Admin'],
+          isActive: true,
+          createdAt: '2024-01-01T00:00:00Z'
+        })
+      });
+    });
+
     await page.route('**/account/profile', async route => {
       await route.fulfill({
         contentType: 'application/json',
@@ -98,24 +142,26 @@ test.describe('Orders Page', () => {
   });
 
   test('should display orders page with navigation', async ({ page }) => {
-    await page.goto('http://localhost:3001/dashboard/orders');
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
+    await dismissNextOverlay(page);
 
     // Check if the page title is present
-    await expect(page.locator('h1')).toContainText('Orders');
+    await expect(page.getByRole('heading', { level: 1, name: /Orders/i })).toBeVisible();
 
     // Check if the sidebar navigation is present
-    await expect(page.locator('text=Identity Admin')).toBeVisible();
-    await expect(page.locator('text=Orders Management')).toBeVisible();
+    await expect(page.getByText('Identity Admin', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Orders Management' })).toBeVisible();
   });
 
   test('should display orders table', async ({ page }) => {
-    await page.goto('http://localhost:3001/dashboard/orders');
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
     
     // Wait for the table to load
     await page.waitForSelector('table', { timeout: 10000 });
+    await dismissNextOverlay(page);
 
     // Check table headers
     await expect(page.locator('text=Order #')).toBeVisible();
@@ -133,10 +179,11 @@ test.describe('Orders Page', () => {
   });
 
   test('should filter orders by status', async ({ page }) => {
-    await page.goto('http://localhost:3001/dashboard/orders');
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
+    await dismissNextOverlay(page);
 
     // Find and click the status filter dropdown
     const statusSelect = page.locator('[data-testid="status-filter"], select, .select-trigger').first();
@@ -155,26 +202,27 @@ test.describe('Orders Page', () => {
   });
 
   test('should show order actions menu', async ({ page }) => {
-    await page.goto('http://localhost:3001/dashboard/orders');
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
     
     // Wait for page to load and table to appear
     await page.waitForSelector('table', { timeout: 10000 });
+    await dismissNextOverlay(page);
 
     // Find and click the first actions menu button
-    const actionButton = page.locator('button[aria-haspopup="menu"]').first();
-    if (await actionButton.isVisible()) {
-      await actionButton.click();
-      
-      // Check if menu items are visible
-      await expect(page.locator('text=View Details')).toBeVisible();
-    }
+    const actionButton = page.locator('table tbody button[aria-haspopup="menu"]').first();
+    await expect(actionButton).toBeVisible();
+    await actionButton.click();
+
+    // Check if menu items are visible
+    await expect(page.getByRole('menuitem', { name: 'View Details' })).toBeVisible();
   });
 
   test('should refresh orders when refresh button is clicked', async ({ page }) => {
-    await page.goto('http://localhost:3001/dashboard/orders');
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
+    await dismissNextOverlay(page);
 
     // Click refresh button
     const refreshButton = page.locator('text=Refresh').first();

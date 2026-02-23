@@ -119,11 +119,11 @@ Monitor HTTP traffic using custom middleware and built-in Serilog request loggin
 - **CORS Logging**: Cross-origin request handling
 </gateway>
 
-<servicea port="5003">
-- **Authorization Logging**: Policy-based access control decisions
-- **API Logging**: Endpoint access and business logic operations
-- **Performance Logging**: Request timing and resource usage
-</servicea>
+<orders port="5003">
+- **Authorization Logging**: Policy-based access control decisions for Orders API
+- **API Logging**: Endpoint access and business logic operations inside Orders
+- **Performance Logging**: Request timing and resource usage for Orders workloads
+</orders>
 </service_specific_features>
 
 <frontend_integration>
@@ -381,3 +381,4 @@ This simplified enterprise-grade logging implementation provides:
 The implementation follows .NET 8 best practices, uses modern C# patterns, and provides a solid foundation for monitoring and debugging the Identity System while maintaining simplicity and leveraging proven Serilog features.
 </conclusion>
 </logging_architecture>
+

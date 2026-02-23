@@ -9,10 +9,10 @@ This document covers Docker configurations, environments, and deployment strateg
 ### Development Setup (Recommended for AI Debugging)
 <code_example language="bash">
 # Backend services in Docker, frontend local
-docker-compose up --build postgres authserver gateway servicea
+docker-compose up --build postgres authserver gateway orders
 
 # Frontend runs locally for easier debugging
-cd src/client && pnpm dev
+cd src/web-admin && npm run dev
 </code_example>
 
 **Benefits of this approach:**
@@ -47,7 +47,7 @@ docker-compose -f docker-compose.prod.yml up --build -d
 - **Client** (when in Docker): `80` (internal) -> `localhost:3000` (host)
 
 ### Local Development
-- **Frontend** (pnpm dev): `localhost:5173`
+- **Frontend** (npm run dev): `localhost:3000`
 - **All backend services**: Access via Docker port mappings above
 
 </port_mapping>
@@ -78,12 +78,12 @@ Auth__Authority="http://authserver:8080"
 Auth__RequireHttpsMetadata="false"
 
 # CORS
-Cors__AllowedOrigins__0="http://localhost:5173"
-Cors__AllowedOrigins__1="http://localhost:3000"
+Cors__AllowedOrigins__0="http://localhost:3000"
+Cors__AllowedOrigins__1="https://localhost:3000"
 
 # YARP Configuration
 ReverseProxy__Clusters__authserver__Destinations__destination1__Address="http://authserver:8080/"
-ReverseProxy__Clusters__servicea__Destinations__destination1__Address="http://servicea:8080/"
+ReverseProxy__Clusters__orders__Destinations__destination1__Address="http://orders:8080/"
 </code_example>
 
 ### Orders Environment Variables
@@ -95,10 +95,10 @@ Auth__AuthenticationProviders__AuthServer__RequireHttpsMetadata="false"
 
 ### Frontend Environment Variables
 <code_example language="bash">
-# API Configuration
-VITE_API_URL="http://localhost:5002"
-VITE_APP_VERSION="1.0.0"
-VITE_ENABLE_DEV_TOOLS="true"
+# Next.js admin UI configuration
+NEXT_PUBLIC_API_BASE_URL="http://localhost:5002"
+NEXT_PUBLIC_AUTH_URL="http://localhost:5000"
+NEXT_PUBLIC_APP_BASE_URL="http://localhost:3000"
 </code_example>
 
 </environment_variables>
@@ -272,7 +272,7 @@ openssl rand -base64 32  # OpenIddict Encryption Key
 
 #### Docker
 - Container-to-container communication
-- Internal DNS resolution (authserver, gateway, servicea)
+- Internal DNS resolution (authserver, gateway, orders)
 - Volume mounts for development
 - Network isolation
 

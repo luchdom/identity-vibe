@@ -1,8 +1,20 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import { authApi, type User } from '@/lib/auth-api';
+import { useRouter } from 'next/navigation';
 import OAuth2Auth from '@/lib/oauth2-auth';
+import { SessionExpiredModal } from '@/components/auth/session-expired-modal';
+import { authEvents } from '@/lib/api';
+
+export interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: string[];
+  isActive: boolean;
+  createdAt: string;
+}
 
 export interface AuthState {
   user: User | null;
@@ -15,6 +27,7 @@ export interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<boolean>;
   authorize: () => void;
+  handleSessionExpired: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,11 +37,13 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const router = useRouter();
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     isLoading: true,
     isAuthenticated: false,
   });
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
 
   // Refresh access token
   const refreshAccessToken = useCallback(async (): Promise<boolean> => {
@@ -56,7 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Optionally verify token is still valid
         try {
-          const serverUser = await authApi.getProfile();
+          const serverUser = await OAuth2Auth.getUserInfo();
           setAuthState({
             user: serverUser,
             isAuthenticated: true,
@@ -122,6 +137,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     OAuth2Auth.authorize();
   }, []);
 
+  // Handle session expired
+  const handleSessionExpired = useCallback(() => {
+    setShowSessionExpired(true);
+  }, []);
+
+  // Handle session expired confirmation
+  const handleSessionExpiredConfirm = useCallback(() => {
+    setShowSessionExpired(false);
+    setAuthState({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    OAuth2Auth.logout();
+  }, []);
+
   // Logout function
   const logout = useCallback(async (): Promise<void> => {
     setAuthState({
@@ -139,17 +170,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, [initializeAuth]);
 
+  // Listen for session expired events from API interceptor
+  useEffect(() => {
+    const handleSessionExpiredEvent = () => {
+      handleSessionExpired();
+    };
+
+    authEvents.addEventListener('sessionExpired', handleSessionExpiredEvent);
+
+    return () => {
+      authEvents.removeEventListener('sessionExpired', handleSessionExpiredEvent);
+    };
+  }, [handleSessionExpired]);
+
   const contextValue: AuthContextType = {
     ...authState,
     login,
     logout,
     refreshAccessToken,
     authorize,
+    handleSessionExpired,
   };
 
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
+      <SessionExpiredModal
+        open={showSessionExpired}
+        onConfirm={handleSessionExpiredConfirm}
+      />
     </AuthContext.Provider>
   );
 };

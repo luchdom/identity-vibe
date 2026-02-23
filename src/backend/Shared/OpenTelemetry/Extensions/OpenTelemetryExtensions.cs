@@ -13,7 +13,7 @@ namespace Shared.OpenTelemetry.Extensions;
 
 public static class OpenTelemetryExtensions
 {
-    public static WebApplicationBuilder AddOpenTelemetryAutoInstrumentation(this WebApplicationBuilder builder, string serviceName, string serviceVersion = "1.0.0")
+    public static WebApplicationBuilder AddOpenTelemetryAutoInstrumentation(this WebApplicationBuilder builder, string serviceName, string serviceVersion = "1.0.0", bool dbTelemetry = false)
     {
         var resourceBuilder = ResourceBuilder.CreateDefault()
             .AddService(serviceName: serviceName, serviceVersion: serviceVersion)
@@ -22,149 +22,6 @@ public static class OpenTelemetryExtensions
                 new KeyValuePair<string, object>("service.namespace", "identity-system"),
                 new KeyValuePair<string, object>("deployment.environment", builder.Environment.EnvironmentName),
                 new KeyValuePair<string, object>("service.instance.id", Environment.MachineName)
-            });
-
-        // Configure OpenTelemetry
-        builder.Services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource = resourceBuilder)
-            .WithTracing(tracerProviderBuilder =>
-            {
-                // Automatic ASP.NET Core instrumentation - captures all endpoints, exceptions, and metrics
-                tracerProviderBuilder
-                    .AddAspNetCoreInstrumentation(options =>
-                    {
-                        // Automatically record exceptions  
-                        // options.RecordException = true; // This property doesn't exist in this version
-                        
-                        // Filter out health check and metrics endpoints from traces
-                        options.Filter = httpContext =>
-                        {
-                            var path = httpContext.Request.Path.Value?.ToLower();
-                            return !path?.Contains("/health") == true && 
-                                   !path?.Contains("/metrics") == true;
-                        };
-                        
-                        // Automatically enrich traces with business context
-                        options.EnrichWithHttpRequest = (activity, request) =>
-                        {
-                            var userAgent = request.Headers.UserAgent.ToString();
-                            if (!string.IsNullOrEmpty(userAgent))
-                            {
-                                activity.SetTag("http.request.header.user_agent", userAgent);
-                            }
-                            var correlationId = request.Headers["X-Correlation-ID"].FirstOrDefault();
-                            if (!string.IsNullOrEmpty(correlationId))
-                            {
-                                activity.SetTag("http.request.header.correlation_id", correlationId);
-                            }
-                            
-                            // Add user context if available
-                            if (request.HttpContext.User?.Identity?.IsAuthenticated == true)
-                            {
-                                activity.SetTag("user.id", request.HttpContext.User.Identity.Name);
-                                activity.SetTag("auth.authenticated", true);
-                            }
-                        };
-                        
-                        options.EnrichWithHttpResponse = (activity, response) =>
-                        {
-                            var correlationId = response.Headers["X-Correlation-ID"].FirstOrDefault();
-                            if (!string.IsNullOrEmpty(correlationId))
-                            {
-                                activity.SetTag("http.response.header.correlation_id", correlationId);
-                            }
-                        };
-                    })
-                    .AddHttpClientInstrumentation(options =>
-                    {
-                        // Automatically capture outgoing HTTP calls
-                        // options.RecordException = true; // This property doesn't exist in this version
-                        options.EnrichWithHttpRequestMessage = (activity, request) =>
-                        {
-                            activity.SetTag("http.client.request.header.correlation_id", 
-                                request.Headers.GetValues("X-Correlation-ID").FirstOrDefault());
-                        };
-                        options.EnrichWithHttpResponseMessage = (activity, response) =>
-                        {
-                            if (response?.Headers != null && response.Headers.TryGetValues("X-Correlation-ID", out var values))
-                            {
-                                activity.SetTag("http.client.response.header.correlation_id", values.FirstOrDefault());
-                            }
-                        };
-                    });
-
-                // Add Entity Framework instrumentation for AuthServer (automatic database tracing)
-                if (serviceName == "authserver")
-                {
-                    tracerProviderBuilder.AddEntityFrameworkCoreInstrumentation(options =>
-                    {
-                        options.SetDbStatementForText = true;
-                        options.SetDbStatementForStoredProcedure = true;
-                        options.EnrichWithIDbCommand = (activity, command) =>
-                        {
-                            // Sanitize connection string for security
-                            var connectionString = command.Connection?.ConnectionString;
-                            if (!string.IsNullOrEmpty(connectionString))
-                            {
-                                activity.SetTag("db.connection_string.sanitized", SanitizeConnectionString(connectionString));
-                            }
-                        };
-                    });
-                    
-                    tracerProviderBuilder.AddSqlClientInstrumentation(options =>
-                    {
-                        options.SetDbStatementForText = true;
-                        options.SetDbStatementForStoredProcedure = true;
-                        options.RecordException = true;
-                    });
-                }
-
-                // Configure OTLP exporter (only if endpoint is configured)
-                var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
-                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
-
-                if (!string.IsNullOrEmpty(otlpEndpoint))
-                {
-                    tracerProviderBuilder.AddOtlpExporter(options =>
-                    {
-                        options.Endpoint = new Uri(otlpEndpoint);
-                        options.Protocol = OtlpExportProtocol.Grpc;
-                    });
-                }
-
-                // Add console exporter for development debugging
-                if (builder.Environment.IsDevelopment())
-                {
-                    tracerProviderBuilder.AddConsoleExporter();
-                }
-            })
-            .WithMetrics(meterProviderBuilder =>
-            {
-                // Automatic metrics collection for ASP.NET Core
-                meterProviderBuilder
-                    .AddAspNetCoreInstrumentation() // HTTP request metrics (duration, count, etc.)
-                    .AddHttpClientInstrumentation() // HTTP client metrics
-                    .AddRuntimeInstrumentation()     // .NET runtime metrics (GC, memory, etc.)
-                    .AddProcessInstrumentation();    // Process metrics (CPU, memory usage)
-
-                // Configure OTLP exporter for metrics (only if endpoint is configured)
-                var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
-                    ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
-
-                if (!string.IsNullOrEmpty(otlpEndpoint))
-                {
-                    meterProviderBuilder.AddOtlpExporter(options =>
-                    {
-                        options.Endpoint = new Uri(otlpEndpoint);
-                        options.Protocol = OtlpExportProtocol.Grpc;
-                    });
-                }
-
-                // Add console exporter for development debugging
-                if (builder.Environment.IsDevelopment())
-                {
-                    meterProviderBuilder.AddConsoleExporter();
-                }
             });
 
         // Configure Serilog to send logs to OpenTelemetry
@@ -194,10 +51,9 @@ public static class OpenTelemetryExtensions
 
             if (!string.IsNullOrEmpty(otlpEndpoint))
             {
-                var logEndpoint = otlpEndpoint.Contains("4317") ? otlpEndpoint.Replace("4317", "4318") : $"{otlpEndpoint}:4318";
                 configuration.WriteTo.OpenTelemetry(options =>
                 {
-                    options.Endpoint = $"{logEndpoint}/v1/logs";
+                    options.Endpoint = $"{otlpEndpoint}/v1/logs";
                     options.ResourceAttributes = new Dictionary<string, object>
                     {
                         ["service.name"] = serviceName,
@@ -227,30 +83,183 @@ public static class OpenTelemetryExtensions
                 .MinimumLevel.Override("OpenTelemetry", LogEventLevel.Warning);
         });
 
-        // Register automatic OpenTelemetry filters for business context enrichment
-        builder.Services.AddScoped<OpenTelemetryActionFilter>();
-        builder.Services.AddScoped<OpenTelemetryExceptionFilter>();
+        if (builder.Environment.IsProduction())
+        {
+            // Configure OpenTelemetry
+            builder.Services.AddOpenTelemetry()
+                .ConfigureResource(resource => resource = resourceBuilder)
+                .WithTracing(tracerProviderBuilder =>
+                {
+                    // Automatic ASP.NET Core instrumentation - captures all endpoints, exceptions, and metrics
+                    tracerProviderBuilder
+                        .AddAspNetCoreInstrumentation(options =>
+                        {
+                            // Automatically record exceptions
+                            // options.RecordException = true; // This property doesn't exist in this version
+
+                            // Filter out health check and metrics endpoints from traces
+                            options.Filter = httpContext =>
+                            {
+                                var path = httpContext.Request.Path.Value?.ToLower();
+                                return !path?.Contains("/health") == true &&
+                                       !path?.Contains("/metrics") == true;
+                            };
+
+                            // Automatically enrich traces with business context
+                            options.EnrichWithHttpRequest = (activity, request) =>
+                            {
+                                var userAgent = request.Headers.UserAgent.ToString();
+                                if (!string.IsNullOrEmpty(userAgent))
+                                {
+                                    activity.SetTag("http.request.header.user_agent", userAgent);
+                                }
+
+                                var correlationId = request.Headers["X-Correlation-ID"].FirstOrDefault();
+                                if (!string.IsNullOrEmpty(correlationId))
+                                {
+                                    activity.SetTag("http.request.header.correlation_id", correlationId);
+                                }
+
+                                // Add user context if available
+                                if (request.HttpContext.User?.Identity?.IsAuthenticated == true)
+                                {
+                                    activity.SetTag("user.id", request.HttpContext.User.Identity.Name);
+                                    activity.SetTag("auth.authenticated", true);
+                                }
+                            };
+
+                            options.EnrichWithHttpResponse = (activity, response) =>
+                            {
+                                var correlationId = response.Headers["X-Correlation-ID"].FirstOrDefault();
+                                if (!string.IsNullOrEmpty(correlationId))
+                                {
+                                    activity.SetTag("http.response.header.correlation_id", correlationId);
+                                }
+                            };
+                        })
+                        .AddHttpClientInstrumentation(options =>
+                        {
+                            // Automatically capture outgoing HTTP calls
+                            // options.RecordException = true; // This property doesn't exist in this version
+                            options.EnrichWithHttpRequestMessage = (activity, request) =>
+                            {
+                                if (request?.Headers != null &&
+                                    request.Headers.TryGetValues("X-Correlation-ID", out var values))
+                                {
+                                    activity.SetTag("http.client.request.header.correlation_id",
+                                        values.FirstOrDefault());
+                                }
+
+                            };
+                            options.EnrichWithHttpResponseMessage = (activity, response) =>
+                            {
+                                if (response?.Headers != null &&
+                                    response.Headers.TryGetValues("X-Correlation-ID", out var values))
+                                {
+                                    activity.SetTag("http.client.response.header.correlation_id",
+                                        values.FirstOrDefault());
+                                }
+                            };
+                        });
+
+                    // Add Entity Framework instrumentation for AuthServer (automatic database tracing)
+                    if (dbTelemetry)
+                    {
+                        tracerProviderBuilder.AddEntityFrameworkCoreInstrumentation(options =>
+                        {
+                            options.SetDbStatementForText = true;
+                            options.SetDbStatementForStoredProcedure = true;
+                            options.EnrichWithIDbCommand = (activity, command) =>
+                            {
+                                // Sanitize connection string for security
+                                var connectionString = command.Connection?.ConnectionString;
+                                if (!string.IsNullOrEmpty(connectionString))
+                                {
+                                    activity.SetTag("db.connection_string.sanitized",
+                                        SanitizeConnectionString(connectionString));
+                                }
+                            };
+                        });
+
+                        tracerProviderBuilder.AddSqlClientInstrumentation(options =>
+                        {
+                            options.SetDbStatementForText = true;
+                            options.SetDbStatementForStoredProcedure = true;
+                            options.RecordException = true;
+                        });
+                    }
+
+                    // Configure OTLP exporter (only if endpoint is configured)
+                    var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
+                                       ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
+
+                    if (!string.IsNullOrEmpty(otlpEndpoint))
+                    {
+                        tracerProviderBuilder.AddOtlpExporter(options =>
+                        {
+                            options.Endpoint = new Uri(otlpEndpoint);
+                            options.Protocol = OtlpExportProtocol.Grpc;
+                        });
+                    }
+
+                    // Add console exporter for development debugging
+                    if (builder.Environment.IsDevelopment())
+                    {
+                        tracerProviderBuilder.AddConsoleExporter();
+                    }
+                })
+                .WithMetrics(meterProviderBuilder =>
+                {
+                    // Automatic metrics collection for ASP.NET Core
+                    meterProviderBuilder
+                        .AddAspNetCoreInstrumentation() // HTTP request metrics (duration, count, etc.)
+                        .AddHttpClientInstrumentation() // HTTP client metrics
+                        .AddRuntimeInstrumentation() // .NET runtime metrics (GC, memory, etc.)
+                        .AddProcessInstrumentation(); // Process metrics (CPU, memory usage)
+
+                    // Configure OTLP exporter for metrics (only if endpoint is configured)
+                    var otlpEndpoint = builder.Configuration.GetValue<string>("OTEL_EXPORTER_OTLP_ENDPOINT")
+                                       ?? builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
+
+                    if (!string.IsNullOrEmpty(otlpEndpoint))
+                    {
+                        meterProviderBuilder.AddOtlpExporter(options =>
+                        {
+                            options.Endpoint = new Uri(otlpEndpoint);
+                            options.Protocol = OtlpExportProtocol.Grpc;
+                        });
+                    }
+
+                    // Add console exporter for development debugging
+                    // if (builder.Environment.IsDevelopment())
+                    // {
+                    //     meterProviderBuilder.AddConsoleExporter();
+                    // }
+                });
+
+            // Register automatic OpenTelemetry filters for business context enrichment
+            builder.Services.AddScoped<OpenTelemetryActionFilter>();
+            builder.Services.AddScoped<OpenTelemetryExceptionFilter>();
+
+            // Add the filters to all controllers automatically
+            builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
+            {
+                options.Filters.Add<OpenTelemetryActionFilter>();
+                options.Filters.Add<OpenTelemetryExceptionFilter>();
+            });
+        }
 
         return builder;
     }
 
-    public static IServiceCollection AddOpenTelemetryFilters(this IServiceCollection services)
-    {
-        // Add the filters to all controllers automatically
-        services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
-        {
-            options.Filters.Add<OpenTelemetryActionFilter>();
-            options.Filters.Add<OpenTelemetryExceptionFilter>();
-        });
-
-        return services;
-    }
-
     public static WebApplication UseOpenTelemetryMiddleware(this WebApplication app)
     {
-        // Enable W3C trace context propagation
-        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
-        Activity.ForceDefaultIdFormat = true;
+        if (app.Environment.IsProduction())
+        {
+            // Enable W3C trace context propagation
+            Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+            Activity.ForceDefaultIdFormat = true;
+        }
 
         return app;
     }
@@ -259,10 +268,10 @@ public static class OpenTelemetryExtensions
     {
         var environment = configuration["ASPNETCORE_ENVIRONMENT"] ?? "Development";
         var logDirectory = configuration["Logging:LogDirectory"] ?? "logs";
-        
+
         // Ensure directory exists
         Directory.CreateDirectory(logDirectory);
-        
+
         return Path.Combine(logDirectory, $"{serviceName.ToLower()}-{environment.ToLower()}.json");
     }
 
@@ -273,7 +282,7 @@ public static class OpenTelemetryExtensions
 
         // Remove sensitive information from connection string
         var parts = connectionString.Split(';')
-            .Where(part => !part.Trim().StartsWith("Password", StringComparison.OrdinalIgnoreCase) 
+            .Where(part => !part.Trim().StartsWith("Password", StringComparison.OrdinalIgnoreCase)
                           && !part.Trim().StartsWith("Pwd", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 

@@ -272,7 +272,7 @@ public class AuthorizationController(
             identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
 
             // Add profile claims and set destinations
-            var nameClaim = new Claim(OpenIddictConstants.Claims.Name, $"{user.FirstName} {user.LastName}");
+            var nameClaim = new Claim(OpenIddictConstants.Claims.Name, user.Email ?? user.UserName ?? user.Id);
             nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
             identity.AddClaim(nameClaim);
 
@@ -282,14 +282,6 @@ public class AuthorizationController(
                 emailClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
                 identity.AddClaim(emailClaim);
             }
-
-            var givenNameClaim = new Claim(OpenIddictConstants.Claims.GivenName, user.FirstName);
-            givenNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
-            identity.AddClaim(givenNameClaim);
-
-            var familyNameClaim = new Claim(OpenIddictConstants.Claims.FamilyName, user.LastName);
-            familyNameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
-            identity.AddClaim(familyNameClaim);
 
             // Get user scopes based on configuration (refresh tokens should maintain the same scopes)
             var originalScopes = result.Principal.GetScopes();
@@ -411,9 +403,7 @@ public class AuthorizationController(
         var claims = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             [Claims.Subject] = user.Id,
-            [Claims.Name] = $"{user.FirstName} {user.LastName}",
-            [Claims.GivenName] = user.FirstName,
-            [Claims.FamilyName] = user.LastName
+            [Claims.Name] = user.Email ?? user.UserName ?? user.Id
         };
 
         if (!string.IsNullOrEmpty(user.Email))
@@ -459,10 +449,11 @@ public class AuthorizationController(
 
         // Add core claims
         identity.AddClaim(Claims.Subject, user.Id);
-        identity.AddClaim(Claims.Name, $"{user.FirstName} {user.LastName}");
-        identity.AddClaim(Claims.Email, user.Email);
-        identity.AddClaim(Claims.GivenName, user.FirstName);
-        identity.AddClaim(Claims.FamilyName, user.LastName);
+        identity.AddClaim(Claims.Name, user.Email ?? user.UserName ?? user.Id);
+        if (!string.IsNullOrEmpty(user.Email))
+        {
+            identity.AddClaim(Claims.Email, user.Email);
+        }
 
         // Add roles
         var roles = await userManager.GetRolesAsync(user);

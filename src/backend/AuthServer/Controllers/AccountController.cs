@@ -1,60 +1,79 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using AuthServer.Models.Requests;
 using AuthServer.Models.Mappers;
 using AuthServer.Services.Interfaces;
-using Shared.Logging.Services;
-using Shared.Common;
-using Shared.Extensions;
 
 namespace AuthServer.Controllers;
 
-[ApiController]
-[Authorize]
-[Route("[controller]")]
-public class AccountController(
-    IAuthenticationService authenticationService,
-    IUserService userService) : ControllerBase
+public class AccountController(IAuthenticationService authenticationService) : Controller
 {
-    [HttpGet("health")]
-    [AllowAnonymous]
-    public IActionResult Health()
+    [HttpGet]
+    public IActionResult Login(string? returnUrl = null)
     {
-        return Ok(new { status = "healthy", service = "authserver", timestamp = DateTime.UtcNow });
+        var request = new LoginRequest
+        {
+            ReturnUrl = returnUrl ?? Url.Content("~/")
+        };
+        return View(request);
     }
-    [HttpPost("register")]
-    [AllowAnonymous]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Login(LoginRequest request)
     {
+        if (!ModelState.IsValid)
+        {
+            return View(request);
+        }
+
+        // Map Request → Command (API → Domain)
         var command = request.ToDomain();
+
+        // Business logic in service layer
+        var result = await authenticationService.LoginAsync(command);
+
+        if (result.Success)
+        {
+            return LocalRedirect(request.ReturnUrl ?? Url.Content("~/"));
+        }
+
+        // Keep the form data and add error message
+        ModelState.AddModelError(string.Empty, result.ErrorMessage ?? "Invalid login attempt.");
+        return View(request);
+    }
+
+    [HttpGet]
+    public IActionResult Register(string? returnUrl = null)
+    {
+        var request = new RegisterRequest
+        {
+            ReturnUrl = returnUrl ?? Url.Content("~/")
+        };
+        return View(request);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Register(RegisterRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(request);
+        }
+
+        // Map Request → Command (API → Domain)
+        var command = request.ToDomain();
+
+        // Business logic in service layer
         var result = await authenticationService.RegisterAsync(command);
 
-        if (result.IsFailure)
+        if (result.Success)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return LocalRedirect(request.ReturnUrl ?? Url.Content("~/"));
         }
 
-        var response = result.Value.ToPresentation();
-        return Ok(response);
-    }
-
-    [HttpGet("profile")]
-    public async Task<IActionResult> GetProfile()
-    {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-
-        var result = await userService.GetUserByIdAsync(userId);
-
-        if (result.IsFailure)
-        {
-            return result.ToActionResultWithProblemDetails(HttpContext);
-        }
-
-        var response = result.Value.ToPresentation();
-        return Ok(response);
+        // Keep the form data and add error message
+        request.ErrorMessage = result.ErrorMessage ?? "Registration failed.";
+        return View(request);
     }
 }

@@ -29,15 +29,8 @@ public class UserRepository(
             Id = Guid.NewGuid().ToString(),
             Email = userViewModel.Email,
             UserName = userViewModel.UserName,
-            FirstName = userViewModel.FirstName,
-            LastName = userViewModel.LastName,
-            EmailConfirmed = userViewModel.EmailConfirmed,
-            PhoneNumber = userViewModel.PhoneNumber,
-            PhoneNumberConfirmed = userViewModel.PhoneNumberConfirmed,
-            TwoFactorEnabled = userViewModel.TwoFactorEnabled,
             CreatedAt = DateTime.UtcNow,
             IsActive = userViewModel.IsActive,
-            LockoutEnabled = userViewModel.LockoutEnabled
         };
 
         var result = await userManager.CreateAsync(entity, password);
@@ -59,7 +52,7 @@ public class UserRepository(
         }
 
         entity.UpdateEntity(userViewModel);
-        
+
         var result = await userManager.UpdateAsync(entity);
         if (!result.Succeeded)
         {
@@ -74,7 +67,7 @@ public class UserRepository(
     {
         var entity = await userManager.FindByIdAsync(id);
         if (entity == null) return false;
-        
+
         var result = await userManager.DeleteAsync(entity);
         return result.Succeeded;
     }

@@ -7,72 +7,51 @@ This document covers Next.js App Router patterns, components, and best practices
 ## Technology Stack
 
 <nextjs_technology_stack>
-  <framework name="Next.js" version="14+">App Router with React Server Components</framework>
-  <framework name="React" version="18+">Modern React with Server Components and Client Components</framework>
-  <framework name="TypeScript" version="5+">Full type safety with strict mode</framework>
-  <styling name="Tailwind CSS" version="3+">Utility-first CSS framework</styling>
-  <components name="shadcn/ui">Radix UI primitives with Tailwind styling</components>
-  <forms name="React Hook Form">Performant forms with built-in validation</forms>
+  <framework name="Next.js" version="15">App Router with React Server and Client Components</framework>
+  <framework name="React" version="19">Concurrent React 19 features with Server Components support</framework>
+  <framework name="TypeScript" version="5">Full type safety with strict mode</framework>
+  <styling name="Tailwind CSS" version="4">Utility-first styling with modern PostCSS pipeline</styling>
+  <components name="shadcn/ui">Radix UI primitives styled for the admin surface</components>
+  <forms name="React Hook Form">Performant forms with schema-based validation</forms>
   <validation name="Zod">TypeScript-first schema validation</validation>
-  <http name="Axios">HTTP client with interceptors for automatic token management</http>
-  <auth name="NextAuth.js">Authentication for Next.js applications</auth>
+  <http name="Axios">HTTP client with Gateway-focused interceptors</http>
+  <state name="Jotai">Lightweight global state for session data</state>
+  <auth name="OAuth2Auth helper">Custom OAuth2 Authorization Code + PKCE integration (`src/web-admin/lib/oauth2-auth.ts`)</auth>
   <testing name="Playwright">End-to-end testing framework</testing>
-  <testing name="Jest">Unit testing with React Testing Library</testing>
 </nextjs_technology_stack>
 
 ## Project Structure
 
 <nextjs_project_structure>
 <code_example language="text">
-src/
-├── app/                          # App Router pages and layouts
-│   ├── (auth)/                   # Route group for auth pages
-│   │   ├── login/
-│   │   │   └── page.tsx
-│   │   ├── register/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   ├── (dashboard)/              # Protected route group
-│   │   ├── dashboard/
-│   │   │   └── page.tsx
-│   │   ├── user-profile/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   ├── api/                      # API routes
-│   │   ├── auth/
-│   │   │   └── [...nextauth]/
-│   │   │       └── route.ts
-│   │   └── users/
-│   │       └── route.ts
-│   ├── layout.tsx                # Root layout
-│   ├── page.tsx                  # Home page
-│   └── global.css                # Global styles
-├── components/                    # Shared components
-│   ├── ui/                       # shadcn/ui components
-│   │   ├── button.tsx
-│   │   ├── card.tsx
-│   │   └── dialog.tsx
-│   ├── layout/                   # Layout components
-│   │   ├── header-nav.tsx
-│   │   ├── sidebar-menu.tsx
-│   │   └── footer-info.tsx
-│   └── features/                 # Feature-specific components
-│       ├── user-card.tsx
-│       └── order-list.tsx
-├── lib/                          # Utilities and configurations
-│   ├── api-client.ts
-│   ├── auth-config.ts
-│   └── utils.ts
-├── hooks/                        # Custom React hooks
-│   ├── use-auth.ts
-│   └── use-debounce.ts
-├── types/                        # TypeScript type definitions
-│   ├── api-types.ts
-│   └── user-types.ts
-├── config/                       # Configuration files
-│   ├── site-config.ts
-│   └── api-endpoints.ts
-└── middleware.ts                 # Next.js middleware
+src/web-admin/
+|- app/
+|  |- (authenticated)/
+|  |  |- admin/page.tsx
+|  |  |- dashboard/page.tsx
+|  |  |- orders/
+|  |  |  |- [id]/page.tsx
+|  |  |  '- page.tsx
+|  |  '- layout.tsx
+|  |- callback/page.tsx
+|  |- login/page.tsx
+|  |- unauthorized/page.tsx
+|  |- layout.tsx
+|  |- page.tsx
+|  '- globals.css
+|- components/
+|  |- auth/session-expired-modal.tsx
+|  '- ui/
+|- contexts/auth-context.tsx
+|- hooks/use-orders.ts
+|- lib/
+|  |- api.ts
+|  |- oauth2-auth.ts
+|  |- orders-api.ts
+|  '- utils.ts
+|- tests/
+|- types/
+'- package.json
 </code_example>
 </nextjs_project_structure>
 
@@ -835,144 +814,58 @@ export async function MetricsPanel() {
 ## Authentication Patterns
 
 <nextjs_authentication_patterns>
-  <nextauth_setup>
-    <rule>Configure NextAuth.js for authentication</rule>
+  <oauth2_pkce>
+    <rule>Use the shared OAuth2Auth helper for the Authorization Code + PKCE login flow</rule>
     <code_example language="typescript">
-// File: app/api/auth/[...nextauth]/route.ts
-import NextAuth from 'next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { API_BASE_URL } from '@/config/api-endpoints'
+import OAuth2Auth from '@/lib/oauth2-auth'
 
-const handler = NextAuth({
-  providers: [
-    CredentialsProvider({
-      name: 'credentials',
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        const res = await fetch(`${API_BASE_URL}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: credentials?.email,
-            password: credentials?.password
-          })
-        })
+export async function beginLogin() {
+  await OAuth2Auth.authorize()
+}
 
-        const user = await res.json()
+export async function completeLogin() {
+  const { user } = await OAuth2Auth.handleCallback()
+  localStorage.setItem('user', JSON.stringify(user))
+}
+    </code_example>
+  </oauth2_pkce>
 
-        if (res.ok && user) {
-          return user
-        }
-        return null
-      }
-    })
-  ],
-  session: {
-    strategy: 'jwt'
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.accessToken = user.accessToken
-        token.refreshToken = user.refreshToken
-        token.userId = user.id
-      }
-      return token
-    },
-    async session({ session, token }) {
-      session.accessToken = token.accessToken
-      session.userId = token.userId
-      return session
-    }
-  },
-  pages: {
-    signIn: '/login',
-    error: '/auth-error'
-  }
-})
-
-export { handler as GET, handler as POST }
-</code_example>
-  </nextauth_setup>
-
-  <middleware_protection>
-    <rule>Use middleware for route protection</rule>
+  <auth_context>
+    <rule>Wrap application surfaces with AuthProvider</rule>
     <code_example language="typescript">
-// File: middleware.ts
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-import { getToken } from 'next-auth/jwt'
+'use client'
 
-export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request })
-  
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login') ||
-                     request.nextUrl.pathname.startsWith('/register')
-  
-  if (isAuthPage) {
-    if (token) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-  } else {
-    if (!token) {
-      const from = request.nextUrl.pathname
-      return NextResponse.redirect(
-        new URL(`/login?from=${encodeURIComponent(from)}`, request.url)
-      )
-    }
+import { AuthProvider, useAuth } from '@/contexts/auth-context'
+
+export function AppProviders({ children }: { children: React.ReactNode }) {
+  return <AuthProvider>{children}</AuthProvider>
+}
+
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, authorize, isLoading } = useAuth()
+
+  if (isLoading) return <div>Loading...</div>
+  if (!isAuthenticated) {
+    authorize()
+    return null
   }
-  
-  return NextResponse.next()
-}
 
-export const config = {
-  matcher: [
-    '/dashboard/:path*',
-    '/admin/:path*',
-    '/user-profile/:path*',
-    '/login',
-    '/register'
-  ]
+  return <>{children}</>
 }
-</code_example>
-  </middleware_protection>
+    </code_example>
+  </auth_context>
 
-  <session_management>
-    <rule>Manage sessions with Server Components</rule>
+  <api_interceptors>
+    <rule>Leverage the configured Axios instance for Gateway requests</rule>
     <code_example language="typescript">
-// File: lib/auth-helpers.ts
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { redirect } from 'next/navigation'
+import { api } from '@/lib/api'
 
-export async function requireAuth() {
-  const session = await getServerSession(authOptions)
-  
-  if (!session) {
-    redirect('/login')
-  }
-  
-  return session
+export async function getOrders() {
+  const response = await api.get('/orders')
+  return response.data
 }
-
-// File: app/dashboard/page.tsx
-import { requireAuth } from '@/lib/auth-helpers'
-
-export default async function DashboardPage() {
-  const session = await requireAuth()
-  
-  return (
-    <div>
-      <h1>Welcome, {session.user.name}</h1>
-      {/* Dashboard content */}
-    </div>
-  )
-}
-</code_example>
-  </session_management>
+    </code_example>
+  </api_interceptors>
 </nextjs_authentication_patterns>
 
 ## Form Handling
@@ -1799,7 +1692,9 @@ const nextConfig = {
   
   // Environment variables
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+    NEXT_PUBLIC_AUTH_URL: process.env.NEXT_PUBLIC_AUTH_URL,
+    NEXT_PUBLIC_APP_BASE_URL: process.env.NEXT_PUBLIC_APP_BASE_URL
   }
 }
 
@@ -1816,8 +1711,8 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable pnpm && pnpm i --frozen-lockfile
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Builder
 FROM node:20-alpine AS builder
@@ -1826,7 +1721,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED 1
-RUN corepack enable pnpm && pnpm build
+RUN npm run build
 
 # Runner
 FROM node:20-alpine AS runner
@@ -1862,17 +1757,13 @@ import { z } from 'zod'
 
 const envSchema = z.object({
   // Public variables (exposed to client)
-  NEXT_PUBLIC_API_URL: z.string().url(),
-  NEXT_PUBLIC_APP_NAME: z.string().default('My App'),
-  NEXT_PUBLIC_GA_ID: z.string().optional(),
-  
+  NEXT_PUBLIC_API_BASE_URL: z.string().url(),
+  NEXT_PUBLIC_AUTH_URL: z.string().url(),
+  NEXT_PUBLIC_APP_BASE_URL: z.string().url().default('http://localhost:3000'),
+
   // Server-only variables
-  DATABASE_URL: z.string(),
-  JWT_SECRET: z.string().min(32),
-  SMTP_HOST: z.string(),
-  SMTP_PORT: z.string().transform(Number),
-  SMTP_USER: z.string(),
-  SMTP_PASS: z.string()
+  GATEWAY_INTERNAL_URL: z.string().default('http://gateway:8080'),
+  AUTH_SERVER_INTERNAL_URL: z.string().default('http://authserver:8080')
 })
 
 // Validate environment variables at build time

@@ -17,7 +17,7 @@ import {
 import { atom, useAtom } from 'jotai';
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from 'lucide-react';
 import type { HTMLAttributes, ReactNode } from 'react';
-import { createContext, memo, useCallback, useContext } from 'react';
+import { cloneElement, createContext, isValidElement, memo, useCallback, useContext, Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -117,7 +117,15 @@ export const TableHeaderGroup = ({
   children,
 }: TableHeaderGroupProps) => (
   <TableRowRaw key={headerGroup.id}>
-    {headerGroup.headers.map((header) => children({ header }))}
+    {headerGroup.headers.map((header) => {
+      const content = children({ header });
+
+      if (isValidElement(content)) {
+        return cloneElement(content, { key: header.id });
+      }
+
+      return <Fragment key={header.id}>{content}</Fragment>;
+    })}
   </TableRowRaw>
 );
 
@@ -131,7 +139,17 @@ export const TableHeader = ({ className, children }: TableHeaderProps) => {
 
   return (
     <TableHeaderRaw className={className}>
-      {table?.getHeaderGroups().map((headerGroup) => children({ headerGroup }))}
+      {table?.getHeaderGroups().map((headerGroup) => {
+        const content = children({ headerGroup });
+
+        if (isValidElement(content)) {
+          return cloneElement(content, { key: headerGroup.id });
+        }
+
+        return (
+          <Fragment key={headerGroup.id}>{content}</Fragment>
+        );
+      })}
     </TableHeaderRaw>
   );
 };
@@ -217,7 +235,15 @@ export const TableRow = ({ row, children, className }: TableRowProps) => (
     data-state={row.getIsSelected() && 'selected'}
     key={row.id}
   >
-    {row.getVisibleCells().map((cell) => children({ cell }))}
+    {row.getVisibleCells().map((cell) => {
+      const content = children({ cell });
+
+      if (isValidElement(content)) {
+        return cloneElement(content, { key: cell.id });
+      }
+
+      return <Fragment key={cell.id}>{content}</Fragment>;
+    })}
   </TableRowRaw>
 );
 
@@ -233,7 +259,15 @@ export const TableBody = ({ children, className }: TableBodyProps) => {
   return (
     <TableBodyRaw className={className}>
       {rows?.length ? (
-        rows.map((row) => children({ row }))
+        rows.map((row) => {
+          const content = children({ row });
+
+          if (isValidElement(content)) {
+            return cloneElement(content, { key: row.id });
+          }
+
+          return <Fragment key={row.id}>{content}</Fragment>;
+        })
       ) : (
         <TableRowRaw>
           <TableCellRaw className="h-24 text-center" colSpan={columns.length}>

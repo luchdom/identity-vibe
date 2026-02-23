@@ -1,3 +1,4 @@
+import axios, { AxiosError } from 'axios';
 import { api } from './api';
 
 /**
@@ -5,15 +6,24 @@ import { api } from './api';
  */
 export class OAuth2Auth {
   private static readonly CLIENT_ID = 'web-admin';
-  private static readonly REDIRECT_URI = `${window.location.origin}/callback`;
-  private static readonly AUTH_SERVER_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:5002';
+  private static readonly AUTH_SERVER_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:5000';
   private static readonly STORAGE_KEY_PREFIX = 'oauth2_';
+
+  /**
+   * Get redirect URI dynamically (client-side only)
+   */
+  private static getRedirectUri(): string {
+    if (typeof window === 'undefined') {
+      throw new Error('OAuth2Auth can only be used on the client side');
+    }
+    return `${window.location.origin}/callback`;
+  }
 
   /**
    * Generate a cryptographically random string
    */
   private static generateRandomString(length: number): string {
-    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     const randomValues = crypto.getRandomValues(new Uint8Array(length));
     return Array.from(randomValues)
       .map(byte => charset[byte % charset.length])
@@ -93,8 +103,8 @@ export class OAuth2Auth {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.CLIENT_ID,
-      redirect_uri: this.REDIRECT_URI,
-      scope: 'openid profile email offline_access orders.read orders.write profile.read profile.write',
+      redirect_uri: this.getRedirectUri(),
+      //scope: 'openid profile email offline_access orders.read orders.write profile.read profile.write',
       state: state,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
@@ -184,30 +194,32 @@ export class OAuth2Auth {
       grant_type: 'authorization_code',
       client_id: this.CLIENT_ID,
       code: code,
-      redirect_uri: this.REDIRECT_URI,
+      redirect_uri: this.getRedirectUri(),
       code_verifier: codeVerifier,
     });
 
-    const response = await fetch(`${this.AUTH_SERVER_URL}/connect/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    });
+    try {
+      const response = await axios.post(`${this.AUTH_SERVER_URL}/connect/token`, formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
+      return {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token,
+        idToken: response.data.id_token,
+      };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const errorMessage = error.response?.data?.error_description ||
+                            error.response?.data?.error ||
+                            error.response?.data ||
+                            error.message;
+        throw new Error(`Token exchange failed: ${errorMessage}`);
+      }
       throw new Error(`Token exchange failed: ${error}`);
     }
-
-    const data = await response.json();
-
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      idToken: data.id_token,
-    };
   }
 
   /**
@@ -216,17 +228,16 @@ export class OAuth2Auth {
   private static async getUserProfile(accessToken: string): Promise<any> {
     // First try userinfo endpoint
     try {
-      const response = await fetch(`${this.AUTH_SERVER_URL}/connect/userinfo`, {
+      const response = await axios.get(`${this.AUTH_SERVER_URL}/connect/userinfo`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
       });
-
-      if (response.ok) {
-        return await response.json();
-      }
+      return response.data;
     } catch (error) {
-      console.warn('Userinfo endpoint failed, falling back to profile API', error);
+      if (error instanceof AxiosError && error.response?.status !== 404) {
+        console.warn('Userinfo endpoint failed, falling back to profile API', error.message);
+      }
     }
 
     // Fallback to profile API
@@ -236,6 +247,14 @@ export class OAuth2Auth {
     try {
       const response = await api.get('/account/profile');
       return response.data;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const errorMessage = error.response?.data?.message ||
+                            error.response?.data?.error ||
+                            error.message;
+        throw new Error(`Failed to get user profile: ${errorMessage}`);
+      }
+      throw error;
     } finally {
       if (previousToken) {
         localStorage.setItem('accessToken', previousToken);
@@ -259,31 +278,33 @@ export class OAuth2Auth {
       refresh_token: refreshToken,
     });
 
-    const response = await fetch(`${this.AUTH_SERVER_URL}/connect/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    });
+    try {
+      const response = await axios.post(`${this.AUTH_SERVER_URL}/connect/token`, formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
+      // Update stored tokens
+      localStorage.setItem('accessToken', response.data.access_token);
+      if (response.data.refresh_token) {
+        localStorage.setItem('refreshToken', response.data.refresh_token);
+      }
+
+      return {
+        accessToken: response.data.access_token,
+        refreshToken: response.data.refresh_token,
+      };
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const errorMessage = error.response?.data?.error_description ||
+                            error.response?.data?.error ||
+                            error.response?.data ||
+                            error.message;
+        throw new Error(`Token refresh failed: ${errorMessage}`);
+      }
       throw new Error(`Token refresh failed: ${error}`);
     }
-
-    const data = await response.json();
-
-    // Update stored tokens
-    localStorage.setItem('accessToken', data.access_token);
-    if (data.refresh_token) {
-      localStorage.setItem('refreshToken', data.refresh_token);
-    }
-
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-    };
   }
 
   /**
@@ -341,6 +362,39 @@ export class OAuth2Auth {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Get user profile from server (moved from auth-api.ts)
+   */
+  static async getUserInfo(): Promise<any> {
+    try {
+      const response = await api.get('/connect/userinfo');
+      return response.data;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        const errorMessage = error.response?.data?.message ||
+                            error.response?.data?.error ||
+                            error.message;
+        throw new Error(`Failed to get user profile: ${errorMessage}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user has specific role
+   */
+  static hasRole(user: any | null, role: string): boolean {
+    return user?.roles?.includes(role) || false;
+  }
+
+  /**
+   * Check if user is admin
+   */
+  static isAdmin(user?: any | null): boolean {
+    const currentUser = user || this.getUser();
+    return this.hasRole(currentUser, 'Admin') || this.hasRole(currentUser, 'ServiceIdentity');
   }
 }
 

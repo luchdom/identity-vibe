@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ordersApi } from '@/lib/orders-api';
 import { useAuth } from '@/contexts/auth-context';
 import type { OrderListResponse, OrdersQueryParams, OrderStatus } from '@/types/orders';
@@ -57,11 +57,15 @@ export function useOrders(params?: OrdersQueryParams): UseOrdersResult {
 
 // Hook for fetching orders with status filtering from URL
 export function useOrdersWithStatus(status?: OrderStatus, page?: number, pageSize?: number) {
-  const params: OrdersQueryParams = {};
-  
-  if (status !== undefined) params.status = status;
-  if (page !== undefined) params.page = page;
-  if (pageSize !== undefined) params.pageSize = pageSize;
+  const params = useMemo(() => {
+    const result: OrdersQueryParams = {};
+
+    if (status !== undefined) result.status = status;
+    if (page !== undefined) result.page = page;
+    if (pageSize !== undefined) result.pageSize = pageSize;
+
+    return result;
+  }, [status, page, pageSize]);
 
   return useOrders(params);
 }

@@ -1,0 +1,19 @@
+@{
+    Layout = "_Layout";
+    ViewData["BodyClass"] = "auth-page";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/auth.css" asp-append-version="true" />
+}
+
+<div class="auth-container">
+    <div class="auth-wrapper">
+        @RenderBody()
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/auth.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("AuthScripts", required: false)
+}

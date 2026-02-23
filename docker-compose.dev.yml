@@ -1,63 +1,74 @@
-version: '3.8'
-
 services:
   # AuthServer with development settings
   authserver:
+    build:
+      context: ./src/backend/AuthServer
+      dockerfile: Dockerfile.dev
+    working_dir: /src/backend/AuthServer
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
+      - ASPNETCORE_URLS=http://+:8080
       # Development URL Configuration
       - EXTERNAL_AUTH_URL=https://localhost:5000
       - EXTERNAL_GATEWAY_URL=http://localhost:5002
-      - EXTERNAL_CLIENT_URL=http://localhost:5173
+      - EXTERNAL_CLIENT_URL=http://localhost:3000
     volumes:
-      - ./src/backend/AuthServer:/app
-      - /app/bin
-      - /app/obj
-    command: dotnet watch run --urls http://+:80
+      - ./src/backend:/src/backend
+      - /src/backend/AuthServer/bin
+      - /src/backend/AuthServer/obj
+    command: dotnet watch run --urls http://+:8080
 
   # Gateway with development settings
   gateway:
+    build:
+      context: ./src/backend/Gateway
+      dockerfile: Dockerfile.dev
+    working_dir: /src/backend/Gateway
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
+      - ASPNETCORE_URLS=http://+:8080
       # Development URL Configuration
       - EXTERNAL_AUTH_URL=https://localhost:5000
       - EXTERNAL_GATEWAY_URL=http://localhost:5002
-      - EXTERNAL_CLIENT_URL=http://localhost:5173
+      - EXTERNAL_CLIENT_URL=http://localhost:3000
     volumes:
-      - ./src/backend/Gateway:/app
-      - /app/bin
-      - /app/obj
-    command: dotnet watch run --urls http://+:80
+      - ./src/backend:/src/backend
+      - /src/backend/Gateway/bin
+      - /src/backend/Gateway/obj
+    command: dotnet watch run --urls http://+:8080
 
   # Orders Service with development settings
   orders:
+    build:
+      context: ./src/backend/Orders
+      dockerfile: Dockerfile.dev
+    working_dir: /src/backend/Orders
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:80
+      - ASPNETCORE_URLS=http://+:8080
       # Development URL Configuration
       - EXTERNAL_AUTH_URL=https://localhost:5000
       - EXTERNAL_GATEWAY_URL=http://localhost:5002
-      - EXTERNAL_CLIENT_URL=http://localhost:5173
+      - EXTERNAL_CLIENT_URL=http://localhost:3000
     volumes:
-      - ./src/backend/Orders:/app
-      - /app/bin
-      - /app/obj
-    command: dotnet watch run --urls http://+:80
+      - ./src/backend:/src/backend
+      - /src/backend/Orders/bin
+      - /src/backend/Orders/obj
+    command: dotnet watch run --urls http://+:8080
 
   # React Client with development settings and hot reload
   client:
     build:
-      context: ./src/client
+      context: ./src/web-admin
       dockerfile: Dockerfile.dev
     ports:
-      - "5173:5173"
+      - "3000:3000"
     volumes:
-      - ./src/client:/app
+      - ./src/web-admin:/app
       - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - VITE_GATEWAY_URL=http://localhost:5002
-      - VITE_AUTH_URL=https://localhost:5000
-    command: npm run dev -- --host 0.0.0.0 --port 5173 
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:5002
+      - NEXT_PUBLIC_AUTH_URL=http://localhost:5000
+      - NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000

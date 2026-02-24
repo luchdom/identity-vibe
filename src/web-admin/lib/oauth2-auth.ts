@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import { api } from './api';
+import { authApi } from './api';
 
 /**
  * OAuth2 Authorization Code Flow with PKCE implementation
@@ -226,7 +226,6 @@ export class OAuth2Auth {
    * Get user profile using access token
    */
   private static async getUserProfile(accessToken: string): Promise<any> {
-    // First try userinfo endpoint
     try {
       const response = await axios.get(`${this.AUTH_SERVER_URL}/connect/userinfo`, {
         headers: {
@@ -235,30 +234,14 @@ export class OAuth2Auth {
       });
       return response.data;
     } catch (error) {
-      if (error instanceof AxiosError && error.response?.status !== 404) {
-        console.warn('Userinfo endpoint failed, falling back to profile API', error.message);
-      }
-    }
-
-    // Fallback to profile API
-    const previousToken = localStorage.getItem('accessToken');
-    localStorage.setItem('accessToken', accessToken); // Temporarily set for API interceptor
-
-    try {
-      const response = await api.get('/account/profile');
-      return response.data;
-    } catch (error) {
       if (error instanceof AxiosError) {
         const errorMessage = error.response?.data?.message ||
+                            error.response?.data?.error_description ||
                             error.response?.data?.error ||
                             error.message;
-        throw new Error(`Failed to get user profile: ${errorMessage}`);
+        throw new Error(`Failed to get user info: ${errorMessage}`);
       }
       throw error;
-    } finally {
-      if (previousToken) {
-        localStorage.setItem('accessToken', previousToken);
-      }
     }
   }
 
@@ -369,7 +352,7 @@ export class OAuth2Auth {
    */
   static async getUserInfo(): Promise<any> {
     try {
-      const response = await api.get('/connect/userinfo');
+      const response = await authApi.get('/connect/userinfo');
       return response.data;
     } catch (error) {
       if (error instanceof AxiosError) {

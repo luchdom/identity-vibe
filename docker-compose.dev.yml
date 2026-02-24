@@ -9,32 +9,12 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       # Development URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_AUTH_URL=http://localhost:5000
       - EXTERNAL_CLIENT_URL=http://localhost:3000
     volumes:
       - ./src/backend:/src/backend
       - /src/backend/AuthServer/bin
       - /src/backend/AuthServer/obj
-    command: dotnet watch run --urls http://+:8080
-
-  # Gateway with development settings
-  gateway:
-    build:
-      context: ./src/backend/Gateway
-      dockerfile: Dockerfile.dev
-    working_dir: /src/backend/Gateway
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:8080
-      # Development URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
-      - EXTERNAL_CLIENT_URL=http://localhost:3000
-    volumes:
-      - ./src/backend:/src/backend
-      - /src/backend/Gateway/bin
-      - /src/backend/Gateway/obj
     command: dotnet watch run --urls http://+:8080
 
   # Orders Service with development settings
@@ -47,8 +27,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
       # Development URL Configuration
-      - EXTERNAL_AUTH_URL=https://localhost:5000
-      - EXTERNAL_GATEWAY_URL=http://localhost:5002
+      - EXTERNAL_AUTH_URL=http://localhost:5000
       - EXTERNAL_CLIENT_URL=http://localhost:3000
     volumes:
       - ./src/backend:/src/backend
@@ -68,7 +47,7 @@ services:
       - /app/node_modules
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:5002
       - NEXT_PUBLIC_AUTH_URL=http://localhost:5000
+      - NEXT_PUBLIC_ORDERS_URL=http://localhost:5003
       - NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
     command: npm run dev -- --hostname 0.0.0.0 --port 3000

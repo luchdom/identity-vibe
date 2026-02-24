@@ -1,4 +1,4 @@
-import { api } from './api';
+import { ordersApi as ordersHttp } from './api';
 import type {
   OrderDetails,
   OrderListResponse,
@@ -24,7 +24,7 @@ export class OrdersApi {
     if (params?.status !== undefined) searchParams.set('status', params.status.toString());
 
     const url = `${this.BASE_PATH}?${searchParams.toString()}`;
-    const response = await api.get<OrderListResponse>(url);
+    const response = await ordersHttp.get<OrderListResponse>(url);
     return response.data;
   }
 
@@ -39,7 +39,7 @@ export class OrdersApi {
     if (params?.status !== undefined) searchParams.set('status', params.status.toString());
 
     const url = `${this.BASE_PATH}/all?${searchParams.toString()}`;
-    const response = await api.get<OrderListResponse>(url);
+    const response = await ordersHttp.get<OrderListResponse>(url);
     return response.data;
   }
 
@@ -47,7 +47,7 @@ export class OrdersApi {
    * Get specific order by ID
    */
   static async getOrderById(id: number): Promise<OrderDetails> {
-    const response = await api.get<OrderDetails>(`${this.BASE_PATH}/${id}`);
+    const response = await ordersHttp.get<OrderDetails>(`${this.BASE_PATH}/${id}`);
     return response.data;
   }
 
@@ -60,7 +60,7 @@ export class OrdersApi {
     statusDisplay: string;
     statusHistory: OrderStatusHistory[];
   }> {
-    const response = await api.get(`${this.BASE_PATH}/${id}/status`);
+    const response = await ordersHttp.get(`${this.BASE_PATH}/${id}/status`);
     return response.data;
   }
 
@@ -68,7 +68,7 @@ export class OrdersApi {
    * Create a new order
    */
   static async createOrder(order: CreateOrderRequest): Promise<{ order: OrderDetails }> {
-    const response = await api.post<{ order: OrderDetails }>(`${this.BASE_PATH}`, order);
+    const response = await ordersHttp.post<{ order: OrderDetails }>(`${this.BASE_PATH}`, order);
     return response.data;
   }
 
@@ -76,7 +76,7 @@ export class OrdersApi {
    * Update an existing order
    */
   static async updateOrder(id: number, order: UpdateOrderRequest): Promise<{ order: OrderDetails }> {
-    const response = await api.put<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}`, order);
+    const response = await ordersHttp.put<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}`, order);
     return response.data;
   }
 
@@ -84,7 +84,7 @@ export class OrdersApi {
    * Cancel an order
    */
   static async cancelOrder(id: number, reason?: string): Promise<{ order: OrderDetails }> {
-    const response = await api.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/cancel`, {
+    const response = await ordersHttp.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/cancel`, {
       reason,
     });
     return response.data;
@@ -97,7 +97,7 @@ export class OrdersApi {
     id: number,
     statusUpdate: UpdateOrderStatusRequest
   ): Promise<{ order: OrderDetails }> {
-    const response = await api.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/status`, statusUpdate);
+    const response = await ordersHttp.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/status`, statusUpdate);
     return response.data;
   }
 
@@ -108,7 +108,7 @@ export class OrdersApi {
     id: number,
     tracking: AddTrackingNumberRequest
   ): Promise<{ order: OrderDetails }> {
-    const response = await api.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/tracking`, tracking);
+    const response = await ordersHttp.post<{ order: OrderDetails }>(`${this.BASE_PATH}/${id}/tracking`, tracking);
     return response.data;
   }
 

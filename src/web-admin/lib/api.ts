@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5002';
+const AUTH_BASE_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:5000';
+const ORDERS_BASE_URL = process.env.NEXT_PUBLIC_ORDERS_URL || 'http://localhost:5003';
+const OAUTH_CLIENT_ID = 'web-admin';
 
 // Correlation ID utilities
 const generateCorrelationId = (): string => {
@@ -25,8 +27,8 @@ export const correlationId = {
   clear: () => sessionStorage.removeItem('correlationId')
 };
 
-export const api = axios.create({
-  baseURL: BASE_URL,
+const createApiClient = (baseURL: string) => axios.create({
+  baseURL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -34,9 +36,13 @@ export const api = axios.create({
   timeout: 10000, // 10 seconds timeout
 });
 
-// Request interceptor to add access token and correlation ID
-api.interceptors.request.use(
-  (config) => {
+export const authApi = createApiClient(AUTH_BASE_URL);
+export const ordersApi = createApiClient(ORDERS_BASE_URL);
+
+const attachInterceptors = (client: typeof authApi, clientName: string) => {
+  // Request interceptor to add access token and correlation ID
+  client.interceptors.request.use(
+    (config) => {
     // Add authorization token
     const token = localStorage.getItem('accessToken');
     if (token) {
@@ -49,7 +55,7 @@ api.interceptors.request.use(
     
     // Log API requests in development
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url} | CorrelationId: ${currentCorrelationId}`);
+        console.log(`[${clientName} Request] ${config.method?.toUpperCase()} ${config.url} | CorrelationId: ${currentCorrelationId}`);
     }
     
     return config;
@@ -57,23 +63,24 @@ api.interceptors.request.use(
   (error) => {
     return Promise.reject(error);
   }
-);
+  );
 
-// Response interceptor to handle token refresh and errors
-api.interceptors.response.use(
-  (response) => {
+  // Response interceptor to handle token refresh and errors
+  client.interceptors.response.use(
+    (response) => {
     // Log successful responses in development
     if (process.env.NODE_ENV === 'development') {
       const correlationId = response.headers['x-correlation-id'] || response.config.headers['X-Correlation-ID'];
-      console.log(`[API Response] ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url} | CorrelationId: ${correlationId}`);
+        console.log(`[${clientName} Response] ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url} | CorrelationId: ${correlationId}`);
     }
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
+    const originalUrl = originalRequest?.url?.toString() ?? '';
 
     // Handle 401 errors and attempt token refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !originalUrl.includes('/connect/token')) {
       originalRequest._retry = true;
 
       try {
@@ -83,9 +90,10 @@ api.interceptors.response.use(
           const formData = new URLSearchParams();
           formData.append('grant_type', 'refresh_token');
           formData.append('refresh_token', refreshToken);
+          formData.append('client_id', OAUTH_CLIENT_ID);
           
           const response = await axios.post(
-            `${BASE_URL}/connect/token`,
+            `${AUTH_BASE_URL}/connect/token`,
             formData,
             { 
               withCredentials: true,
@@ -105,7 +113,7 @@ api.interceptors.response.use(
 
           // Retry the original request
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          return api(originalRequest);
+          return client(originalRequest);
         }
       } catch (refreshError) {
         // Refresh failed, clear auth data and emit session expired event
@@ -122,11 +130,17 @@ api.interceptors.response.use(
 
     // Log error responses in development
     if (process.env.NODE_ENV === 'development') {
-      const correlationId = error.response?.headers['x-correlation-id'] || originalRequest.headers['X-Correlation-ID'];
-      console.error(`[API Error] ${error.response?.status} ${originalRequest.method?.toUpperCase()} ${originalRequest.url} | CorrelationId: ${correlationId}`, error);
+      const correlationId = error.response?.headers['x-correlation-id'] || originalRequest?.headers?.['X-Correlation-ID'];
+      console.error(`[${clientName} Error] ${error.response?.status} ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url} | CorrelationId: ${correlationId}`, error);
     }
 
     return Promise.reject(error);
   }
-);
+  );
+};
 
+attachInterceptors(authApi, 'Auth API');
+attachInterceptors(ordersApi, 'Orders API');
+
+// Temporary compatibility export for any remaining imports.
+export const api = ordersApi;

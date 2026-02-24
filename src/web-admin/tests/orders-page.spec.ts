@@ -25,7 +25,7 @@ test.describe('Orders Page', () => {
     // Mock API calls to prevent actual backend calls during testing
     await page.route((url) => {
       const requestUrl = typeof url === 'string' ? url : url.href;
-      return requestUrl.includes('localhost:5002') && requestUrl.includes('/orders');
+      return requestUrl.includes('/orders');
     }, async route => {
       if (route.request().resourceType() === 'document') {
         return route.continue();
@@ -113,22 +113,6 @@ test.describe('Orders Page', () => {
         })
       });
     });
-
-    await page.route('**/account/profile', async route => {
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'admin-id',
-          email: 'admin@example.com',
-          firstName: 'Admin',
-          lastName: 'User',
-          roles: ['Admin'],
-          isActive: true,
-          createdAt: '2024-01-01T00:00:00Z'
-        })
-      });
-    });
-
     // Mock localStorage for authentication
     await page.addInitScript(() => {
       localStorage.setItem('accessToken', 'mock-token');

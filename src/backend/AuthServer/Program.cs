@@ -154,9 +154,18 @@ builder.Services.AddOpenIddict()
                .AllowClientCredentialsFlow()
                .AllowRefreshTokenFlow();
 
-        // Register the signing and encryption credentials
-        options.AddDevelopmentEncryptionCertificate()
-               .AddDevelopmentSigningCertificate();
+        // Register signing and encryption credentials.
+        // Integration tests use ephemeral keys to avoid dev certificate store flakiness.
+        if (builder.Environment.IsEnvironment("IntegrationTest"))
+        {
+            options.AddEphemeralEncryptionKey()
+                   .AddEphemeralSigningKey();
+        }
+        else
+        {
+            options.AddDevelopmentEncryptionCertificate()
+                   .AddDevelopmentSigningCertificate();
+        }
 
         // Register the ASP.NET Core host and configure the ASP.NET Core options
         options.UseAspNetCore()
@@ -250,3 +259,5 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
     .AllowAnonymous();
 
 app.Run();
+
+public partial class Program { }

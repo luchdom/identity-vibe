@@ -19,6 +19,7 @@
 <div asp-validation-summary="All" class="validation-summary"></div>
 
 <form method="post">
+    @Html.AntiForgeryToken()
     <div class="form-group">
         <label asp-for="Email">Email</label>
         <input asp-for="Email" type="email" autocomplete="username" placeholder="m@example.com" />

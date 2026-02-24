@@ -31,10 +31,8 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Database=AuthServer;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
       # Production URL Configuration (set via .env file)
       - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL}
-      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL}
       - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL}
       - INTERNAL_AUTH_URL=http://authserver:80
-      - INTERNAL_GATEWAY_URL=http://gateway:80
       - INTERNAL_ORDERS_URL=http://orders:80
     ports:
       - "5000:80"
@@ -42,31 +40,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks:
-      - identity-network
-    restart: unless-stopped
-
-  # Gateway BFF
-  gateway:
-    build:
-      context: .
-      dockerfile: src/backend/Gateway/Dockerfile
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:80;https://+:443
-      # Production URL Configuration (set via .env file)
-      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL}
-      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL}
-      - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL}
-      - INTERNAL_AUTH_URL=http://authserver:80
-      - INTERNAL_GATEWAY_URL=http://gateway:80
-      - INTERNAL_ORDERS_URL=http://orders:80
-    ports:
-      - "5002:80"
-      - "5004:443"
-    depends_on:
-      - authserver
-      - orders
     networks:
       - identity-network
     restart: unless-stopped
@@ -81,10 +54,8 @@ services:
       - ASPNETCORE_URLS=http://+:80;https://+:443
       # Production URL Configuration (set via .env file)
       - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL}
-      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL}
       - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL}
       - INTERNAL_AUTH_URL=http://authserver:80
-      - INTERNAL_GATEWAY_URL=http://gateway:80
       - INTERNAL_ORDERS_URL=http://orders:80
     ports:
       - "5003:80"
@@ -101,13 +72,14 @@ services:
       context: ./src/web-admin
       dockerfile: Dockerfile
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=${EXTERNAL_GATEWAY_URL}
       - NEXT_PUBLIC_AUTH_URL=${EXTERNAL_AUTH_URL}
+      - NEXT_PUBLIC_ORDERS_URL=${EXTERNAL_ORDERS_URL}
       - NEXT_PUBLIC_APP_BASE_URL=${EXTERNAL_CLIENT_URL}
     ports:
       - "3000:3000"
     depends_on:
-      - gateway
+      - authserver
+      - orders
     networks:
       - identity-network
     restart: unless-stopped

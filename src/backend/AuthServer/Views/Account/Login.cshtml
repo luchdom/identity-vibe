@@ -12,6 +12,7 @@
 <div asp-validation-summary="All" class="validation-summary"></div>
 
 <form method="post">
+    @Html.AntiForgeryToken()
     <div class="form-group">
         <label for="credential-select">Quick Login (Testing)</label>
         <select id="credential-select" onchange="fillCredentials()">

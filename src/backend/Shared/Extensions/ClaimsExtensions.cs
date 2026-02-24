@@ -24,7 +24,7 @@ public static class ClaimsExtensions
     public static bool IsAdmin(this ClaimsPrincipal user)
     {
         return user.IsInRole("Admin") || 
-               user.HasClaim("scope", "admin.manage") ||
+               user.HasClaim("scope", "admin.full") ||
                user.HasClaim("role", "admin");
     }
 

@@ -12,11 +12,9 @@ services:
       # Enable detailed exception pages
       - ASPNETCORE_DETAILEDERRORS=true
       # URL Configuration
-      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL:-https://localhost:5000}
-      - EXTERNAL_GATEWAY_URL=${EXTERNAL_GATEWAY_URL:-http://localhost:5002}
+      - EXTERNAL_AUTH_URL=${EXTERNAL_AUTH_URL:-http://localhost:5000}
       - EXTERNAL_CLIENT_URL=${EXTERNAL_CLIENT_URL:-http://localhost:3000}
       - INTERNAL_AUTH_URL=http://authserver:8080
-      - INTERNAL_GATEWAY_URL=http://gateway:8080
       - INTERNAL_ORDERS_URL=http://orders:8080
       # OpenTelemetry configuration
       - OTEL_SERVICE_NAME=authserver

@@ -37,7 +37,9 @@ public static class SecurityConstants
         public const string OpenId = "openid";
         public const string Profile = "profile";
         public const string Email = "email";
-        public const string AdminManage = "admin.manage";
+        public const string AdminFull = "admin.full";
+        public const string AdminUsers = "admin.users";
+        public const string AdminRoles = "admin.roles";
         public const string OrdersRead = "orders.read";
         public const string OrdersWrite = "orders.write";
         public const string OrdersManage = "orders.manage";

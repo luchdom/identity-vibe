@@ -1,42 +1,31 @@
 @Orders_HostAddress = http://localhost:5003
+@access_token = YOUR_ACCESS_TOKEN_HERE
 
 # ===========================================
-# Orders API Endpoints - WORKING
+# Orders API (Direct Calls)
 # ===========================================
 
-# First, get a token from AuthServer using:
-# POST http://localhost:5000/connect/token with gateway-bff client
+### Health
+GET {{Orders_HostAddress}}/health
 
-### Create Order - WORKING ✅
+### Get current user's orders
+GET {{Orders_HostAddress}}/orders?page=1&pageSize=10
+Authorization: Bearer {{access_token}}
+
+### Get all orders (admin)
+GET {{Orders_HostAddress}}/orders/all?page=1&pageSize=10
+Authorization: Bearer {{access_token}}
+
+### Create order
 POST {{Orders_HostAddress}}/orders
-Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IjJENTQ5OThGNzQwMDA0QUNENkE1RUJCODMxMzI0NjczRDRCMkI3REMiLCJ4NXQiOiJMVlNaajNRQUJLeldwZXU0TVRKR2M5U3l0OXciLCJ0eXAiOiJhdCtqd3QifQ.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAvIiwiZXhwIjoxNzU3NjA2ODQ5LCJpYXQiOjE3NTc2MDMyNDksInNjb3BlIjoib3BlbmlkIHByb2ZpbGUgZW1haWwgb3JkZXJzLnJlYWQgb3JkZXJzLndyaXRlIHByb2ZpbGUucmVhZCBwcm9maWxlLndyaXRlIiwianRpIjoiYzA1ZTQyNGEtODVmMi00MTIzLTk5MjctODkwZWQ1ZTNhNDc1Iiwic3ViIjoiMTI0NTA1NGEtY2YxMi00OTg3LTk1OTktYTNhN2YxNTQ1YzA4IiwibmFtZSI6IkphbmUgVXNlciIsImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSIsImdpdmVuX25hbWUiOiJKYW5lIiwiZmFtaWx5X25hbWUiOiJVc2VyIiwib2lfcHJzdCI6ImdhdGV3YXktYmZmIiwiY2xpZW50X2lkIjoiZ2F0ZXdheS1iZmYiLCJvaV90a25faWQiOiI3NTRmOGQ1Ni03YWVjLTQ3ZjgtYTY2Yi05NjhkMmJlMjFjOWYifQ.jntzPbZ6L3gMmDAmFzmT-D66UIVtRT9AfQjZ0hQhTp-Qjpqtsya08rQ9Gqn7MPsMKXUhMnXg7uQLPhFFj3lfSoLKMJJjWZdH1hFmU3IX0BilmxQC9twbQNcUqObuu84O2Pol3YT3ktF7gyVmLykFFxWvlpvsxbMKGNpDjgcI084TVRZ1XTYJIm-RscXwFzHOLRUKKgGlM6bdZV_JOvi193c2RMwWKU824GoZQIsik6UNboC2VmdVWCyvbKEItieAlVlkRhUE_Mrh1NXjauyl5HAh4tX7cManaQpBM9bsqKO8BFILJVA6zotIlL0PhGSDRlRYzQz1yr59qRUKAHQ0Og
+Authorization: Bearer {{access_token}}
 Content-Type: application/json
-
-{
-  "customer": {
-    "firstName": "Jane",
-    "lastName": "User", 
-    "email": "user@example.com"
-  },
-  "items": [
-    {
-      "productSku": "TEST-001",
-      "productName": "Test Product",
-      "quantity": 2,
-      "unitPrice": 10.99
-    }
-  ]
-}
-
-### Create Order (Replace token with current one)
-POST {{Orders_HostAddress}}/orders
-Authorization: Bearer YOUR_ACCESS_TOKEN_HERE
-Content-Type: application/json
+Idempotency-Key: order-12345-unique
 
 {
   "customer": {
     "firstName": "John",
-    "lastName": "Doe", 
+    "lastName": "Doe",
     "email": "customer@example.com",
     "phone": "+1234567890"
   },
@@ -56,60 +45,30 @@ Content-Type: application/json
     "postalCode": "12345",
     "country": "USA"
   },
-  "specialInstructions": "Please handle with care",
-  "idempotencyKey": "order-12345-unique"
+  "specialInstructions": "Please handle with care"
 }
 
-# ===========================================
-# Example Token Requests for Orders - USE THESE IN AUTHSERVER.HTTP
-# ===========================================
+### Get order by ID
+GET {{Orders_HostAddress}}/orders/1
+Authorization: Bearer {{access_token}}
 
-### User Token for Orders (WORKING) ✅
-# POST http://localhost:5000/connect/token
-# Content-Type: application/x-www-form-urlencoded
-# 
-# grant_type=password
-# &client_id=gateway-bff
-# &client_secret=gateway-secret
-# &username=user@example.com
-# &password=User123!
-# &scope=openid profile email orders.read orders.write profile.read profile.write
+### Update order
+PUT {{Orders_HostAddress}}/orders/1
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
 
-### Admin Token for Orders (WORKING) ✅
-# POST http://localhost:5000/connect/token
-# Content-Type: application/x-www-form-urlencoded
-# 
-# grant_type=password
-# &client_id=gateway-bff
-# &client_secret=gateway-secret
-# &username=admin@example.com
-# &password=Admin123!
-# &scope=openid profile email orders.read orders.write orders.manage profile.read profile.write admin.manage admin.users admin.roles
+{
+  "specialInstructions": "Updated instructions"
+}
 
-### Service Token for Orders (WORKING) ✅
-# POST http://localhost:5000/connect/token
-# Content-Type: application/x-www-form-urlencoded
-# 
-# grant_type=client_credentials
-# &client_id=Orders
-# &client_secret=orders-secret
-# &scope=internal.orders.read internal.orders.write internal.orders.manage
+### Cancel order
+POST {{Orders_HostAddress}}/orders/1/cancel
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
 
-# ===========================================
-# Docker Services Configuration
-# ===========================================
-# AuthServer: http://localhost:5000 (Docker: http://authserver:8080)
-# Gateway: http://localhost:5002 (Docker: http://gateway:8080)  
-# Orders: http://localhost:5003 (Docker: http://orders:8080)
-# Postgres: localhost:5432 (Docker: postgres:5432)
+{
+  "reason": "Customer requested cancellation"
+}
 
-# ===========================================
-# Authentication Flow Summary
-# ===========================================
-# ✅ FIXED: JWT validation now works end-to-end
-# ✅ FIXED: Scope assignment working correctly  
-# ✅ FIXED: Orders API accepts JWT tokens with proper scopes
-# ✅ FIXED: User role assignment in database seeding
-# ✅ FIXED: ScopeConfiguration loading from appsettings.Scopes.json
-
-###
+# Token tip:
+# Use `src/backend/AuthServer/AuthServer.http` to obtain tokens directly from AuthServer.

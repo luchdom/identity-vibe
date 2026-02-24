@@ -343,11 +343,9 @@ public class DatabaseSeeder(
             return value;
 
         return value
-            .Replace("${EXTERNAL_AUTH_URL}", configuration["EXTERNAL_AUTH_URL"] ?? "https://localhost:5000")
-            .Replace("${EXTERNAL_GATEWAY_URL}", configuration["EXTERNAL_GATEWAY_URL"] ?? "http://localhost:5002")
+            .Replace("${EXTERNAL_AUTH_URL}", configuration["EXTERNAL_AUTH_URL"] ?? "http://localhost:5000")
             .Replace("${EXTERNAL_CLIENT_URL}", configuration["EXTERNAL_CLIENT_URL"] ?? "http://localhost:3000")
             .Replace("${INTERNAL_AUTH_URL}", configuration["INTERNAL_AUTH_URL"] ?? "http://authserver:8080")
-            .Replace("${INTERNAL_GATEWAY_URL}", configuration["INTERNAL_GATEWAY_URL"] ?? "http://gateway:8080")
             .Replace("${INTERNAL_ORDERS_URL}", configuration["INTERNAL_ORDERS_URL"] ?? "http://orders:8080");
     }
 }

@@ -23,8 +23,10 @@ public static class ClaimsExtensions
     /// </summary>
     public static bool IsAdmin(this ClaimsPrincipal user)
     {
-        return user.IsInRole("Admin") || 
-               user.HasClaim("scope", "admin.full") ||
+        // Coarse helper for admin-like behavior branching. Route authorization should use policies/scopes.
+        return user.HasScope("orders.manage") ||
+               user.HasScope("admin.full") ||
+               user.IsInRole("Admin") ||
                user.HasClaim("role", "admin");
     }
 
@@ -46,7 +48,7 @@ public static class ClaimsExtensions
     {
         return user.Claims
             .Where(c => c.Type == "scope")
-            .Select(c => c.Value)
+            .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Distinct();
     }
 
@@ -55,7 +57,7 @@ public static class ClaimsExtensions
     /// </summary>
     public static bool HasScope(this ClaimsPrincipal user, string scope)
     {
-        return user.HasClaim("scope", scope);
+        return user.GetScopes().Contains(scope, StringComparer.Ordinal);
     }
 
     /// <summary>

@@ -46,6 +46,14 @@ NEXT_PUBLIC_ORDERS_URL=http://localhost:5003
 - User profile retrieval uses `GET /connect/userinfo`.
 - Orders UI calls `Orders` endpoints directly under `/orders/*`.
 
+## RBAC Model (Current)
+
+- Users have roles (`Admin`, `User`, `Support`).
+- `AuthServer` maps roles to permission scopes using `src/backend/AuthServer/appsettings.Scopes.json`.
+- APIs authorize routes by scope-based policies (for example `orders.read`, `orders.write`, `orders.manage`).
+- User PKCE tokens include role-derived permission scopes (project-specific behavior), while protocol scopes (`openid`, `profile`, `email`, `offline_access`, `roles`) remain request-driven.
+- Refresh token grants recompute current role-derived permission scopes (role changes apply on refresh/re-login/expiry for existing sessions).
+
 ## Useful Endpoints
 
 - Auth health: `GET http://localhost:5000/health`
@@ -59,6 +67,12 @@ AuthServer authentication flow integration tests (xUnit + FluentAssertions + Web
 
 ```bash
 dotnet test tests/backend/AuthServer.IntegrationTests/AuthServer.IntegrationTests.csproj
+```
+
+Shared claims helper tests (scope parsing/admin helper):
+
+```bash
+dotnet test tests/backend/Shared.UnitTests/Shared.UnitTests.csproj
 ```
 
 ## Docs

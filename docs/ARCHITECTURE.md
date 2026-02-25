@@ -22,8 +22,35 @@ The browser calls `AuthServer` and `Orders` directly. There is no separate rever
 
 - `AuthServer` issues JWT access tokens.
 - `Orders` validates tokens using `AuthServer` as authority.
-- `Orders` policies enforce scopes/roles (`orders.read`, `orders.write`, `orders.manage`).
-- Admin capabilities rely on the `Admin` role and/or admin scopes (`admin.full`, `admin.users`, `admin.roles`).
+- RBAC model:
+  - Roles are identity/grouping metadata on the user (`Admin`, `User`, `Support`).
+  - Scopes are API permissions (for example `orders.read`, `orders.write`, `orders.manage`).
+  - `AuthServer` maps roles to permission scopes using `ScopeConfiguration:UserScopes:RoleScopes`.
+- User PKCE token issuance behavior (project-specific):
+  - Permission scopes are derived from the user's roles and included in the token (not limited by requested business scopes).
+  - Protocol scopes (`openid`, `profile`, `email`, `offline_access`, `roles`) remain request-driven.
+- Refresh-token behavior:
+  - `AuthServer` re-evaluates the user's current role-derived permission scopes.
+  - Role downgrades remove permissions on refresh.
+  - Role upgrades can add permissions on refresh.
+- `Orders` route authorization is scope-based via policies (`orders.read`, `orders.write`, `orders.manage`) and should not rely on role fallback.
+- Admin-like branching inside `Orders` should align to permission scopes (`orders.manage`) and may also accept `admin.full`.
+
+## RBAC Extension Workflow
+
+When adding a new permission:
+
+1. Add a scope to `src/backend/AuthServer/appsettings.Scopes.json`
+2. Map the scope to roles in `ScopeConfiguration:UserScopes:RoleScopes`
+3. Add the scope to the relevant client(s) in `src/backend/AuthServer/appsettings.Clients.json` if needed
+4. Add/update an API policy (for example in `src/backend/Orders/appsettings.json`)
+5. Add/update integration/unit tests for issuance and route enforcement
+
+## Guardrails
+
+- Do not authorize OAuth-protected API routes directly by role claims when the permission model is scope-based.
+- Do not assume the `scope` claim arrives in only one format (`scope` may be repeated claims or a space-separated value).
+- With self-contained JWTs, RBAC changes affect existing access tokens only after refresh/re-login/expiry.
 
 ## Service Ports (dev)
 

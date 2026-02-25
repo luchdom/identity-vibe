@@ -192,6 +192,5 @@ Validated/resolved during implementation:
 
 Remaining planned follow-ups (not blockers):
 
-- Additional negative cases (`unsupported_grant_type`, missing client secret, invalid PKCE verifier)
-- Scope filtering and roles-scope assertions
 - Expired token simulation path
+- CI workflow coverage for Docker-enabled integration tests

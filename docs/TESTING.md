@@ -19,6 +19,8 @@ Location:
 - Identity + OpenIddict endpoint wiring
 - Real PostgreSQL persistence/seeding
 - OAuth2/OIDC auth flows (`authorize`, login, token, userinfo, refresh, client credentials)
+- RBAC token issuance behavior (role -> scope mapping for user flows)
+- Refresh-token permission re-evaluation after role changes
 
 These tests are intended to catch wiring/config/auth regressions that unit tests typically miss.
 
@@ -49,6 +51,20 @@ dotnet test
 ```
 
 ## Best Practices in This Repo
+
+### RBAC test split (repo-specific)
+
+Use the right test level for each RBAC concern:
+
+- `AuthServer.IntegrationTests`
+  - validate role -> scope issuance
+  - validate refresh-token permission recomputation (role upgrades/downgrades)
+  - validate protocol behavior (`invalid_grant`, `unsupported_grant_type`, etc.)
+- `Shared.UnitTests`
+  - validate claim parsing helpers (`scope` repeated vs space-separated)
+  - validate coarse helper behavior (for example `IsAdmin()`)
+- `Orders` integration tests (recommended next)
+  - validate `200/403` route enforcement matrix by scopes
 
 ### Prefer real auth integration over mocks for auth changes
 
@@ -140,3 +156,25 @@ public async Task HealthEndpoint_ReturnsOk()
 5. Container startup timing / Docker availability
 - If Docker is not running or startup is slow, Testcontainers initialization will fail before tests execute.
 - Start Docker first and rerun the suite; avoid adding sleeps in tests.
+
+6. RBAC assertion mismatch (requested scopes vs granted scopes)
+- This repo intentionally grants user PKCE permission scopes from role mapping, even when those permission scopes were not explicitly requested.
+- Do not write tests that assume user access token permission scopes are always request-limited.
+
+7. `scope` claim format assumptions
+- `scope` may appear as repeated claims or a single space-separated value depending on middleware/token handling.
+- Use shared parsing helpers in assertions/authorization helpers instead of direct single-claim equality checks.
+
+## Current RBAC Test Commands
+
+AuthServer integration tests:
+
+```bash
+dotnet test tests/backend/AuthServer.IntegrationTests/AuthServer.IntegrationTests.csproj
+```
+
+Shared claims/unit tests:
+
+```bash
+dotnet test tests/backend/Shared.UnitTests/Shared.UnitTests.csproj
+```

@@ -12,7 +12,8 @@ namespace Shared.Authorization.Extensions;
 public static class AuthorizationExtensions
 {
     /// <summary>
-    /// Adds authorization policies from configuration with OR logic between scopes and roles
+    /// Adds authorization policies from configuration with OR logic between scopes and roles.
+    /// Resource APIs using OAuth/OIDC should generally prefer scope-only policies and leave Roles empty.
     /// </summary>
     /// <param name="services">The service collection</param>
     /// <param name="configuration">The configuration containing Authorization:Policies section</param>

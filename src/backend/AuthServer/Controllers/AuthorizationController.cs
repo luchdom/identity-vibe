@@ -7,9 +7,9 @@ using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using System.Security.Claims;
 using AuthServer.Data.Entities;
+using AuthServer.Models.Authorization;
 using AuthServer.Services;
-using Microsoft.Extensions.Options;
-using AuthServer.Configuration;
+using AuthServer.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using Microsoft.Extensions.Primitives;
@@ -22,12 +22,20 @@ public class AuthorizationController(
     IOpenIddictApplicationManager applicationManager,
     IOpenIddictAuthorizationManager authorizationManager,
     IOpenIddictScopeManager scopeManager,
-    IOpenIddictTokenManager tokenManager,
     UserManager<AppUser> userManager,
     SignInManager<AppUser> signInManager,
     ScopeConfigurationService scopeConfigService,
-    IOptions<ClientConfiguration> clientConfig) : Controller
+    IAuthorizationGrantService authorizationGrantService) : Controller
 {
+    private static readonly HashSet<string> ProtocolScopes = new(StringComparer.Ordinal)
+    {
+        Scopes.OpenId,
+        Scopes.Email,
+        Scopes.Profile,
+        Scopes.OfflineAccess,
+        Scopes.Roles
+    };
+
     [HttpGet("~/connect/authorize")]
     [HttpPost("~/connect/authorize")]
     [IgnoreAntiforgeryToken]
@@ -98,205 +106,18 @@ public class AuthorizationController(
 
         if (request.IsAuthorizationCodeGrantType())
         {
-            // Retrieve the claims principal stored in the authorization code
-            var authenticateResult = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-            if (!authenticateResult.Succeeded)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The authorization code is no longer valid."
-                    }));
-            }
-
-            var userId = authenticateResult.Principal.GetClaim(Claims.Subject);
-            var user = await userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user associated with the authorization code no longer exists."
-                    }));
-            }
-
-            // Ensure the user is still active
-            if (!user.IsActive)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user account has been disabled."
-                    }));
-            }
-
-            // Return the existing principal
-            return SignIn(authenticateResult.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var result = await authorizationGrantService.HandleAuthorizationCodeGrantAsync(HttpContext);
+            return ToGrantFlowActionResult(result);
         }
         else if (request.IsClientCredentialsGrantType())
         {
-            // Validate the client credentials using scope configuration
-            if (string.IsNullOrEmpty(request.ClientId) || string.IsNullOrEmpty(request.ClientSecret))
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidClient,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "Client credentials are required."
-                    }));
-            }
-
-            // Validate client using OpenIddict application manager
-            var application = await applicationManager.FindByClientIdAsync(request.ClientId);
-            if (application == null)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidClient
-                    }));
-            }
-
-            // Validate client secret for confidential clients
-            var clientType = await applicationManager.GetClientTypeAsync(application);
-            if (clientType == OpenIddictConstants.ClientTypes.Confidential)
-            {
-                if (!await applicationManager.ValidateClientSecretAsync(application, request.ClientSecret))
-                {
-                    return Forbid(
-                        authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                        properties: new AuthenticationProperties(new Dictionary<string, string?>
-                        {
-                            [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidClient
-                        }));
-                }
-            }
-
-            // Create a new ClaimsIdentity containing the claims that will be used to create an id_token, a token or a code.
-            var identity = new ClaimsIdentity(
-                authenticationType: TokenValidationParameters.DefaultAuthenticationType,
-                nameType: OpenIddictConstants.Claims.Name,
-                roleType: OpenIddictConstants.Claims.Role);
-
-            // Add the claims associated with the client application
-            identity.AddClaim(OpenIddictConstants.Claims.Subject, await applicationManager.GetClientIdAsync(application));
-            identity.AddClaim(OpenIddictConstants.Claims.Name, await applicationManager.GetDisplayNameAsync(application) ?? string.Empty);
-
-            // Get valid scopes for this client from OpenIddict
-            var requestedScopes = request.GetScopes();
-            var validScopes = new List<string>();
-
-            foreach (var scope in requestedScopes)
-            {
-                if (await applicationManager.HasPermissionAsync(application, OpenIddictConstants.Permissions.Prefixes.Scope + scope))
-                {
-                    validScopes.Add(scope);
-                }
-            }
-
-            // Set the list of scopes granted to the client application
-            identity.SetScopes(validScopes);
-
-            // Create a new authentication ticket holding the client identity
-            var principal = new ClaimsPrincipal(identity);
-
-            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var result = await authorizationGrantService.HandleClientCredentialsGrantAsync(request);
+            return ToGrantFlowActionResult(result);
         }
         else if (request.IsRefreshTokenGrantType())
         {
-            // Retrieve the claims principal stored in the refresh token
-            var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-            if (!result.Succeeded)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The refresh token is no longer valid."
-                    }));
-            }
-
-            // Retrieve the user profile corresponding to the refresh token
-            var userId = result.Principal.GetClaim(OpenIddictConstants.Claims.Subject);
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The refresh token does not contain a valid user identifier."
-                    }));
-            }
-
-            var user = await userManager.FindByIdAsync(userId);
-            if (user == null)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user associated with the refresh token no longer exists."
-                    }));
-            }
-
-            // Check if user is still active
-            if (!user.IsActive)
-            {
-                return Forbid(
-                    authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
-                    properties: new AuthenticationProperties(new Dictionary<string, string?>
-                    {
-                        [OpenIddictServerAspNetCoreConstants.Properties.Error] = OpenIddictConstants.Errors.InvalidGrant,
-                        [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = "The user account is disabled."
-                    }));
-            }
-
-            // Create a new ClaimsIdentity containing the claims that will be used to create an id_token, a token or a code.
-            var identity = new ClaimsIdentity(
-                authenticationType: TokenValidationParameters.DefaultAuthenticationType,
-                nameType: OpenIddictConstants.Claims.Name,
-                roleType: OpenIddictConstants.Claims.Role);
-
-            // Add the claims associated with the user to the identity
-            identity.AddClaim(OpenIddictConstants.Claims.Subject, user.Id);
-
-            // Add profile claims and set destinations
-            var nameClaim = new Claim(OpenIddictConstants.Claims.Name, user.Email ?? user.UserName ?? user.Id);
-            nameClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
-            identity.AddClaim(nameClaim);
-
-            if (!string.IsNullOrEmpty(user.Email))
-            {
-                var emailClaim = new Claim(OpenIddictConstants.Claims.Email, user.Email);
-                emailClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken);
-                identity.AddClaim(emailClaim);
-            }
-
-            // Get user scopes based on configuration (refresh tokens should maintain the same scopes)
-            var originalScopes = result.Principal.GetScopes();
-            var userScopes = scopeConfigService.GetUserScopes(user);
-
-            // Only keep scopes that the user is still authorized for
-            var validScopes = originalScopes.Where(scope => userScopes.Contains(scope)).ToArray();
-
-            // Set the list of scopes granted to the client application
-            identity.SetScopes(validScopes);
-
-            // Create a new authentication ticket holding the user identity
-            var principal = new ClaimsPrincipal(identity);
-
-            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var result = await authorizationGrantService.HandleRefreshTokenGrantAsync(HttpContext);
+            return ToGrantFlowActionResult(result);
         }
 
         return Forbid(
@@ -462,17 +283,15 @@ public class AuthorizationController(
             identity.AddClaim(Claims.Role, role);
         }
 
-        // Get user scopes based on configuration
-        var userScopes = await scopeConfigService.GetUserScopesAsync(user);
-
-        // Filter requested scopes against user's allowed scopes
-        var requestedScopes = request.GetScopes();
-        var validScopes = requestedScopes.Where(scope =>
-            userScopes.Contains(scope) ||
-            scope == Scopes.OpenId ||
-            scope == Scopes.Email ||
-            scope == Scopes.Profile ||
-            scope == Scopes.OfflineAccess).ToList();
+        // Product decision: grant all role-derived permission scopes for user PKCE flows
+        // (not limited by requested business scopes). Protocol scopes remain request-driven.
+        var configuredUserScopes = await scopeConfigService.GetUserScopesAsync(user);
+        var roleDerivedPermissionScopes = configuredUserScopes.Where(scope => !IsProtocolScope(scope));
+        var requestedProtocolScopes = request.GetScopes().Where(IsProtocolScope);
+        var validScopes = roleDerivedPermissionScopes
+            .Concat(requestedProtocolScopes)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         identity.SetScopes(validScopes);
         identity.SetResources(await scopeManager.ListResourcesAsync(validScopes.ToImmutableArray()).ToListAsync());
@@ -508,4 +327,33 @@ public class AuthorizationController(
 
         return destinations;
     }
+
+    private IActionResult ToGrantFlowActionResult(GrantFlowResult result)
+    {
+        if (result.IsSuccess)
+        {
+            return SignIn(result.Principal!, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
+        return Forbid(
+            authenticationSchemes: OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
+            properties: CreateProtocolErrorProperties(result.Error!, result.ErrorDescription));
+    }
+
+    private static AuthenticationProperties CreateProtocolErrorProperties(string error, string? errorDescription)
+    {
+        var properties = new Dictionary<string, string?>
+        {
+            [OpenIddictServerAspNetCoreConstants.Properties.Error] = error
+        };
+
+        if (!string.IsNullOrWhiteSpace(errorDescription))
+        {
+            properties[OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = errorDescription;
+        }
+
+        return new AuthenticationProperties(properties);
+    }
+
+    private static bool IsProtocolScope(string scope) => ProtocolScopes.Contains(scope);
 }

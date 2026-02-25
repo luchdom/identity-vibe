@@ -33,15 +33,22 @@ Implemented and verified:
 - Real login page + anti-forgery + cookies + redirects + auth-code PKCE flow
 - `userinfo`, refresh token, client credentials, and core negative cases
 - Docs updates (`docs/TESTING.md`, `README.md`, `docs/DEVELOPMENT.md`, `docs/AGENTS.MD`)
-- Local test run passes: `11/11`
+- Local test run passes: `18/18`
 
 Intentionally not implemented yet (left as follow-up items in this checklist):
 
-- Missing-secret / unsupported-grant token negative cases
-- Invalid PKCE verifier auth-code exchange test
 - Expired token simulation
-- Additional scope-filtering / roles-scope assertions
 - CI workflow automation for integration tests
+
+Newly implemented after initial pass:
+
+- Missing-secret client credentials protocol error case
+- Unsupported grant type protocol error case
+- Invalid PKCE verifier auth-code exchange negative case
+- Disabled-user refresh token invalid-grant case
+- Unauthorized client scope request protocol error case
+- Regular-user admin-scope filtering assertion
+- UserInfo roles-claim absence assertion when roles scope not granted
 
 ## 0. Test Scope and Success Criteria
 
@@ -356,6 +363,7 @@ Notes:
 - [ ] Add token introspection endpoint tests (`/connect/introspect`)
 - [ ] Add CI workflow to run integration tests on PRs (Docker-enabled runner)
 - [ ] Add shared test utilities package if future backend services adopt same pattern
+- [ ] Add expired-token simulation test (only if implemented deterministically)
 
 ## Implementation Log
 
@@ -370,6 +378,7 @@ Notes:
 Change notes:
 
 - Added `tests/backend/AuthServer.IntegrationTests` with 11 passing auth-flow integration tests.
+- Expanded auth-flow suite to 18 passing tests with additional negative/protocol cases.
 - Added test-host support in `src/backend/AuthServer/Program.cs` (`IntegrationTest` env + ephemeral OpenIddict keys + `public partial class Program`).
 - Fixed anti-forgery token rendering in login/register Razor views to support real form POST integration tests.
 - Added repo testing guidance in `docs/TESTING.md` and linked from `README.md` / `docs/DEVELOPMENT.md` / `docs/AGENTS.MD`.

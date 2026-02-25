@@ -36,6 +36,21 @@ NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
 2. Authenticate via OAuth2 redirect to `AuthServer`
 3. Verify user profile loads via `/connect/userinfo`
 4. Verify orders list loads from `Orders`
+5. Verify browser requests do not call `:5002` (no gateway)
+
+## RBAC Development Notes
+
+- Source of truth for role -> permission mapping is `src/backend/AuthServer/appsettings.Scopes.json` (`ScopeConfiguration:UserScopes:RoleScopes`).
+- `Orders` route auth is scope-based (`Authorization:Policies` in `src/backend/Orders/appsettings.json`).
+- PKCE user login grants role-derived permission scopes automatically (project-specific behavior), while protocol scopes remain request-driven.
+- `client_credentials` grants remain request/intersection-based.
+- Role changes take effect for existing sessions on refresh/re-login/expiry (self-contained JWT behavior).
+
+## RBAC Smoke Test (manual)
+
+1. Login as `user@example.com` and verify normal orders screens work but admin orders routes/features do not.
+2. Login as `admin@example.com` and verify `orders.manage` capabilities (all orders/admin endpoints) work.
+3. Change a user's role in Auth DB (or admin tool), then refresh token/login again and verify permissions change accordingly.
 
 ## Backend Integration Tests
 

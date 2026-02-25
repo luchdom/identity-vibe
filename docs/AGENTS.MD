@@ -19,10 +19,17 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build postgr
 - When changing auth scopes/clients, update both:
 - `src/backend/AuthServer/appsettings.Clients.json`
 - `src/backend/AuthServer/appsettings.Scopes.json`
+- RBAC model in this repo:
+- Roles map to permission scopes in `AuthServer` (`ScopeConfiguration:UserScopes:RoleScopes`)
+- APIs (for example `Orders`) authorize routes by scopes/policies, not role fallback
+- User PKCE tokens include role-derived permission scopes (project-specific behavior), while protocol scopes remain request-driven
+- Refresh token grants recompute current role-derived permission scopes (role changes apply on refresh/re-login/expiry)
 - For `AuthServer` auth changes, prefer real backend integration tests (`tests/backend/AuthServer.IntegrationTests`) over mocks for regression coverage.
+- For scope/claims helper changes, add/update `tests/backend/Shared.UnitTests`.
 
 ## Manual Smoke
 
 - Login through the web admin UI
 - Load orders list from `Orders`
+- Verify role-based permissions manifest as scopes in API behavior (user vs admin paths)
 - Confirm auth + orders logs include correlation IDs

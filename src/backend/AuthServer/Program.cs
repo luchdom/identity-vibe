@@ -118,6 +118,7 @@ builder.Services.Configure<ClientConfiguration>(
 // Register services
 builder.Services.AddScoped<ScopeConfigurationService>();
 builder.Services.AddScoped<DatabaseSeeder>();
+builder.Services.AddScoped<IAuthorizationGrantService, AuthorizationGrantService>();
 
 // Clean Architecture Services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();

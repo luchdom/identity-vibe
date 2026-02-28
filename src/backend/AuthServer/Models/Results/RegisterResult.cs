@@ -2,9 +2,9 @@ using AuthServer.Models.ViewModels;
 
 namespace AuthServer.Models.Results;
 
-public class RegisterResult
+public sealed record RegisterResult
 {
-    public bool Success { get; set; }
-    public string? ErrorMessage { get; set; }
-    public UserViewModel? User { get; set; }
+    public required bool Success { get; init; }
+    public string? ErrorMessage { get; init; }
+    public UserViewModel? User { get; init; }
 }

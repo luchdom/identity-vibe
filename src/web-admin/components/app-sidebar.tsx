@@ -1,11 +1,12 @@
 'use client'
 
 import * as React from "react"
-import { GalleryVerticalEnd, Minus, Plus, ShoppingCart, Home, Users, Settings, LogOut, User, Shield } from "lucide-react"
+import { GalleryVerticalEnd, Minus, Plus, ShoppingCart, Home, Users, Settings, Shield } from "lucide-react"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import { SearchForm } from "@/components/search-form"
 import { useAuth } from "@/contexts/auth-context"
-import { isAdmin } from "@/components/auth/AuthGuard"
+import { canAccessAdminPanel } from "@/lib/authz"
 import {
   Collapsible,
   CollapsibleContent,
@@ -49,19 +50,6 @@ const data = {
         {
           title: "All Orders",
           url: "/orders",
-          isActive: true,
-        },
-        {
-          title: "Pending Orders",
-          url: "/orders?status=0",
-        },
-        {
-          title: "Shipped Orders",
-          url: "/orders?status=3",
-        },
-        {
-          title: "Cancelled Orders",
-          url: "/orders?status=5",
         },
       ],
     },
@@ -131,7 +119,9 @@ const data = {
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user, logout } = useAuth();
+  const { user, scopes, logout } = useAuth();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const handleLogout = async () => {
     try {
@@ -142,6 +132,47 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       console.error('Logout error:', error);
     }
   };
+
+  const currentQuery = React.useMemo(() => searchParams.toString(), [searchParams]);
+
+  const isNavItemActive = React.useCallback((url: string) => {
+    if (!url || url === '#') {
+      return false;
+    }
+
+    let target: URL;
+    try {
+      target = new URL(url, 'http://localhost');
+    } catch {
+      return false;
+    }
+
+    // Orders is a feature area: list + filters + detail + create routes.
+    if (target.pathname === '/orders') {
+      return pathname === '/orders' || pathname.startsWith('/orders/');
+    }
+
+    if (pathname !== target.pathname) {
+      return false;
+    }
+
+    const targetParams = new URLSearchParams(target.search);
+    for (const [key, value] of targetParams.entries()) {
+      if (searchParams.get(key) !== value) {
+        return false;
+      }
+    }
+
+    return true;
+  }, [pathname, searchParams]);
+
+  const groupHasActiveItem = React.useCallback((items?: Array<{ url: string }>) => {
+    if (!items?.length) {
+      return false;
+    }
+
+    return items.some((navItem) => isNavItemActive(navItem.url));
+  }, [isNavItemActive]);
 
   return (
     <Sidebar {...props}>
@@ -166,10 +197,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {data.navMain.filter(item => !item.adminOnly || isAdmin(user)).map((item, index) => (
+            {data.navMain.filter(item => !item.adminOnly || canAccessAdminPanel(scopes)).map((item, index) => (
               <Collapsible
-                key={item.title}
-                defaultOpen={index === 1}
+                key={`${item.title}:${pathname}:${currentQuery}`}
+                defaultOpen={groupHasActiveItem(item.items as Array<{ url: string }>) || index === 1}
                 className="group/collapsible"
               >
                 <SidebarMenuItem>
@@ -188,7 +219,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           <SidebarMenuSubItem key={item.title}>
                             <SidebarMenuSubButton
                               asChild
-                              isActive={'isActive' in item ? item.isActive : false}
+                              isActive={isNavItemActive(item.url)}
                             >
                               <a href={item.url}>{item.title}</a>
                             </SidebarMenuSubButton>

@@ -18,6 +18,5 @@ public class OrderStatusHistoryConfiguration : IEntityTypeConfiguration<OrderSta
               .HasForeignKey(osh => osh.OrderId)
               .OnDelete(DeleteBehavior.Cascade);
         
-        builder.Property(osh => osh.CreatedAt).HasDefaultValueSql("datetime('now')");
     }
 }

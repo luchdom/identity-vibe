@@ -4,7 +4,6 @@ using AuthServer.Services;
 using AuthServer.Models;
 using Microsoft.Extensions.Options;
 using AuthServer.Configuration;
-using OpenIddict.Abstractions;
 
 namespace AuthServer.Controllers;
 
@@ -13,8 +12,7 @@ namespace AuthServer.Controllers;
 [Authorize]
 public class ScopeController(
     ScopeConfigurationService scopeConfigService,
-    IOptions<ClientConfiguration> clientConfig,
-    IOpenIddictApplicationManager applicationManager) : ControllerBase
+    IOptions<ClientConfiguration> clientConfig) : ControllerBase
 {
     [HttpGet("clients")]
     public ActionResult<IEnumerable<object>> GetClients()
@@ -72,7 +70,7 @@ public class ScopeController(
     }
 
     [HttpGet("validate-client")]
-    public async Task<ActionResult<object>> ValidateClient([FromQuery] string clientId, [FromQuery] string clientSecret)
+    public ActionResult<object> ValidateClient([FromQuery] string clientId, [FromQuery] string clientSecret)
     {
         var client = clientConfig.Value.Clients.FirstOrDefault(c => c.ClientId == clientId);
         var isValid = client != null &&

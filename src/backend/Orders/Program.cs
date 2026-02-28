@@ -11,6 +11,7 @@ using Orders.Repositories.Interfaces;
 using Orders.Services;
 using Orders.Services.Interfaces;
 using Shared.Authorization.Extensions;
+using Shared.Authorization.Models;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 
@@ -47,15 +48,9 @@ builder.Services.AddSwaggerGen();
 // Add Entity Framework
 builder.Services.AddDbContext<OrdersDbContext>(options =>
 {
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    if (builder.Environment.EnvironmentName == "Docker")
-    {
-        options.UseSqlite(connectionString);
-    }
-    else
-    {
-        options.UseSqlite(connectionString);
-    }
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
+    options.UseNpgsql(connectionString);
 });
 
 // Configure CORS
@@ -95,6 +90,11 @@ builder.Services.AddOpenIddict()
 
 // Add authentication
 builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+
+builder.Services.AddSingleton<IValidateOptions<AuthorizationConfig>, AuthorizationConfigValidator>();
+builder.Services.AddOptions<AuthorizationConfig>()
+    .Bind(builder.Configuration.GetSection("Authorization"))
+    .ValidateOnStart();
 
 // Configure authorization with configurable policies
 builder.Services.AddConfigurablePolicies(builder.Configuration);
@@ -146,10 +146,11 @@ app.UseAuthorization();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<OrdersDbContext>();
-    await context.Database.EnsureCreatedAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<DatabaseSeeder>>();
+    await context.Database.MigrateAsync();
 
     // Seed sample data
-    var seeder = new DatabaseSeeder(context);
+    var seeder = new DatabaseSeeder(context, app.Environment.ContentRootPath, logger);
     await seeder.SeedAsync();
 }
 

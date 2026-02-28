@@ -13,6 +13,5 @@ public class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Idempoten
         builder.HasIndex(ir => new { ir.UserId, ir.IdempotencyKey });
         builder.HasIndex(ir => ir.ExpiresAt); // For cleanup queries
         
-        builder.Property(ir => ir.CreatedAt).HasDefaultValueSql("datetime('now')");
     }
 }

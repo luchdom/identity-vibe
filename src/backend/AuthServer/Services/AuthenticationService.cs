@@ -2,7 +2,6 @@ using AuthServer.Data.Entities;
 using AuthServer.Models.Commands;
 using AuthServer.Models.Results;
 using AuthServer.Models.ViewModels;
-using AuthServer.Repositories.Interfaces;
 using AuthServer.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Shared.Common;
@@ -10,7 +9,6 @@ using Shared.Common;
 namespace AuthServer.Services;
 
 public class AuthenticationService(
-    IUserRepository userRepository,
     SignInManager<AppUser> signInManager,
     UserManager<AppUser> userManager,
     ILogger<AuthenticationService> logger) : IAuthenticationService

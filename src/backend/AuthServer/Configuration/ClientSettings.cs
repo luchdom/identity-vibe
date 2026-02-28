@@ -1,15 +1,15 @@
 namespace AuthServer.Configuration;
 
-public class ClientSettings
+public sealed record ClientSettings
 {
-    public string ClientId { get; set; } = string.Empty;
-    public string? ClientSecret { get; set; }
-    public string DisplayName { get; set; } = string.Empty;
-    public string Type { get; set; } = "Public";
-    public List<string> RedirectUris { get; set; } = new();
-    public List<string> PostLogoutRedirectUris { get; set; } = new();
-    public List<string> AllowedGrantTypes { get; set; } = new();
-    public List<string> AllowedScopes { get; set; } = new();
-    public bool RequireConsent { get; set; } = false;
-    public bool RequirePkce { get; set; } = true;
+    public required string ClientId { get; init; }
+    public string? ClientSecret { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Type { get; init; }
+    public List<string> RedirectUris { get; init; } = [];
+    public List<string> PostLogoutRedirectUris { get; init; } = [];
+    public required List<string> AllowedGrantTypes { get; init; }
+    public required List<string> AllowedScopes { get; init; }
+    public bool RequireConsent { get; init; }
+    public bool RequirePkce { get; init; } = true;
 }

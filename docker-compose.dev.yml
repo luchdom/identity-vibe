@@ -8,6 +8,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=Orders;Username=postgres;Password=postgres
       # Development URL Configuration
       - EXTERNAL_AUTH_URL=http://localhost:5000
       - EXTERNAL_CLIENT_URL=http://localhost:3000

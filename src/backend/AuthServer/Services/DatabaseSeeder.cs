@@ -4,6 +4,8 @@ using AuthServer.Data.Entities;
 using OpenIddict.Abstractions;
 using Microsoft.Extensions.Options;
 using AuthServer.Configuration;
+using Microsoft.EntityFrameworkCore;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace AuthServer.Services;
 
@@ -22,11 +24,14 @@ public class DatabaseSeeder(
     {
         try
         {
-            // Ensure database is created
-            await context.Database.EnsureCreatedAsync();
+            // Apply EF migrations (replaces EnsureCreated to support schema evolution).
+            await context.Database.MigrateAsync();
 
             // Seed roles
             await SeedRolesAsync();
+
+            // Seed default role -> scope assignments from configuration (bootstrap only).
+            await SeedRoleScopeAssignmentsAsync();
 
             // Seed default users (admin and regular)
             await SeedDefaultUsersAsync();
@@ -40,6 +45,66 @@ public class DatabaseSeeder(
         {
             logger.LogError(ex, "An error occurred while seeding the database");
             throw;
+        }
+    }
+
+    private async Task SeedRoleScopeAssignmentsAsync()
+    {
+        var configuredRoleScopes = scopeConfig.Value.UserScopes.RoleScopes;
+        if (configuredRoleScopes.Count == 0)
+        {
+            return;
+        }
+
+        var validScopeNames = new HashSet<string>(
+            (scopeConfig.Value.Scopes ?? new List<ScopeSettings>())
+                .Select(s => s.Name),
+            StringComparer.Ordinal);
+
+        foreach (var (roleName, scopes) in configuredRoleScopes)
+        {
+            var role = await roleManager.FindByNameAsync(roleName);
+            if (role == null)
+            {
+                logger.LogWarning("Skipping role scope bootstrap for missing role {RoleName}", roleName);
+                continue;
+            }
+
+            var hasExistingAssignments = await context.RoleScopes.AnyAsync(rs => rs.RoleId == role.Id);
+            if (hasExistingAssignments)
+            {
+                continue;
+            }
+
+            var roleScopeRows = scopes
+                .Where(scope => !string.IsNullOrWhiteSpace(scope))
+                .Where(scope => !IsProtocolScope(scope))
+                .Where(scope =>
+                {
+                    var isValid = validScopeNames.Contains(scope);
+                    if (!isValid)
+                    {
+                        logger.LogWarning("Skipping invalid scope {ScopeName} while bootstrapping role {RoleName}", scope, roleName);
+                    }
+
+                    return isValid;
+                })
+                .Distinct(StringComparer.Ordinal)
+                .Select(scope => new AppRoleScope
+                {
+                    RoleId = role.Id,
+                    ScopeName = scope
+                })
+                .ToList();
+
+            if (roleScopeRows.Count == 0)
+            {
+                continue;
+            }
+
+            await context.RoleScopes.AddRangeAsync(roleScopeRows);
+            await context.SaveChangesAsync();
+            logger.LogInformation("Bootstrapped {Count} role scope assignments for role {RoleName}", roleScopeRows.Count, roleName);
         }
     }
 
@@ -348,4 +413,7 @@ public class DatabaseSeeder(
             .Replace("${INTERNAL_AUTH_URL}", configuration["INTERNAL_AUTH_URL"] ?? "http://authserver:8080")
             .Replace("${INTERNAL_ORDERS_URL}", configuration["INTERNAL_ORDERS_URL"] ?? "http://orders:8080");
     }
+
+    private static bool IsProtocolScope(string scopeName) =>
+        scopeName is Scopes.OpenId or Scopes.Profile or Scopes.Email or Scopes.OfflineAccess or Scopes.Roles;
 }

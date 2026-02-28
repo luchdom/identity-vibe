@@ -18,12 +18,13 @@ export interface User {
 
 export interface AuthState {
   user: User | null;
+  scopes: string[];
   isLoading: boolean;
   isAuthenticated: boolean;
 }
 
 export interface AuthContextType extends AuthState {
-  login: (userOrEmail: User | string, passwordOrToken?: string) => Promise<{ success: boolean; error?: string }> | void;
+  login: (user: User) => void;
   logout: () => Promise<void>;
   refreshAccessToken: () => Promise<boolean>;
   authorize: () => void;
@@ -40,6 +41,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const router = useRouter();
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
+    scopes: [],
     isLoading: true,
     isAuthenticated: false,
   });
@@ -63,8 +65,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const storedUser = OAuth2Auth.getUser();
 
       if (accessToken && storedUser) {
+        const storedScopes = OAuth2Auth.getScopes();
         setAuthState({
           user: storedUser,
+          scopes: storedScopes,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -74,6 +78,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const serverUser = await OAuth2Auth.getUserInfo();
           setAuthState({
             user: serverUser,
+            scopes: OAuth2Auth.getScopes(),
             isAuthenticated: true,
             isLoading: false,
           });
@@ -85,6 +90,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             OAuth2Auth.logout();
             setAuthState({
               user: null,
+              scopes: [],
               isAuthenticated: false,
               isLoading: false,
             });
@@ -93,6 +99,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         setAuthState({
           user: null,
+          scopes: [],
           isAuthenticated: false,
           isLoading: false,
         });
@@ -100,32 +107,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       setAuthState({
         user: null,
+        scopes: [],
         isAuthenticated: false,
         isLoading: false,
       });
     }
   }, [refreshAccessToken]);
 
-  // Login function - supports both OAuth2 callback and direct login
-  const login = useCallback((userOrEmail: User | string, passwordOrToken?: string): Promise<{ success: boolean; error?: string }> | void => {
-    // OAuth2 callback login (user object and token provided)
-    if (typeof userOrEmail === 'object' && passwordOrToken) {
-      setAuthState({
-        user: userOrEmail,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-      return;
-    }
-
-    // Direct password login (deprecated - will be removed)
-    if (typeof userOrEmail === 'string' && passwordOrToken) {
-      // For now, just redirect to OAuth2 flow
-      authorize();
-      return Promise.resolve({ success: false, error: 'Please use the OAuth2 login flow' });
-    }
-
-    return Promise.resolve({ success: false, error: 'Invalid login parameters' });
+  const login = useCallback((user: User): void => {
+    setAuthState({
+      user,
+      scopes: OAuth2Auth.getScopes(),
+      isAuthenticated: true,
+      isLoading: false,
+    });
   }, []);
 
   // Initiate OAuth2 authorization flow
@@ -147,6 +142,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setShowSessionExpired(false);
     setAuthState({
       user: null,
+      scopes: [],
       isAuthenticated: false,
       isLoading: false,
     });
@@ -157,6 +153,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async (): Promise<void> => {
     setAuthState({
       user: null,
+      scopes: [],
       isAuthenticated: false,
       isLoading: false,
     });

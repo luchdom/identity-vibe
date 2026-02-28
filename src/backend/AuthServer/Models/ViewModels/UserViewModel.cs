@@ -2,13 +2,13 @@ using AuthServer.Data.Entities;
 
 namespace AuthServer.Models.ViewModels;
 
-public class UserViewModel
+public sealed record UserViewModel
 {
-    public string Id { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string? UserName { get; set; }
-    public bool IsActive { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public required string Id { get; init; }
+    public required string Email { get; init; }
+    public string? UserName { get; init; }
+    public bool IsActive { get; init; }
+    public DateTime CreatedAt { get; init; }
 
     public static UserViewModel FromEntity(AppUser user)
     {

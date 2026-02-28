@@ -116,11 +116,16 @@ test.describe('Orders Page', () => {
     // Mock localStorage for authentication
     await page.addInitScript(() => {
       localStorage.setItem('accessToken', 'mock-token');
+      localStorage.setItem('refreshToken', 'mock-refresh');
+      localStorage.setItem('grantedScopes', 'openid profile email orders.read orders.write');
       localStorage.setItem('user', JSON.stringify({
         id: 'admin-id',
         email: 'admin@example.com',
-        name: 'Admin User',
-        roles: ['Admin']
+        firstName: 'Admin',
+        lastName: 'User',
+        roles: ['Admin'],
+        isActive: true,
+        createdAt: '2024-01-01T00:00:00Z'
       }));
     });
   });
@@ -138,6 +143,7 @@ test.describe('Orders Page', () => {
     // Check if the sidebar navigation is present
     await expect(page.getByText('Identity Admin', { exact: false })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Orders Management' })).toBeVisible();
+    await expect(page.locator('[data-sidebar=\"menu-sub-button\"][data-active=\"true\"]', { hasText: 'All Orders' })).toBeVisible();
   });
 
   test('should display orders table', async ({ page }) => {
@@ -169,20 +175,14 @@ test.describe('Orders Page', () => {
     await page.waitForLoadState('networkidle');
     await dismissNextOverlay(page);
 
-    // Find and click the status filter dropdown
-    const statusSelect = page.locator('[data-testid="status-filter"], select, .select-trigger').first();
-    if (await statusSelect.isVisible()) {
-      await statusSelect.click();
-      
-      // Try to select a status option
-      const confirmedOption = page.locator('text=Confirmed').first();
-      if (await confirmedOption.isVisible()) {
-        await confirmedOption.click();
-      }
-    }
+    await expect(page.getByTestId('status-filter-group')).toBeVisible();
+    await page.getByTestId('status-filter-shipped').click();
+    await page.waitForLoadState('networkidle');
 
     // The page should still show the orders table
     await expect(page.locator('table')).toBeVisible();
+    await expect(page).toHaveURL(/status=3/);
+    await expect(page.locator('[data-sidebar=\"menu-sub-button\"][data-active=\"true\"]', { hasText: 'All Orders' })).toBeVisible();
   });
 
   test('should show order actions menu', async ({ page }) => {
@@ -216,5 +216,29 @@ test.describe('Orders Page', () => {
 
     // Page should still show orders
     await expect(page.locator('table')).toBeVisible();
+  });
+
+  test('should show enabled new order button when user has create scope', async ({ page }) => {
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
+    await page.waitForLoadState('networkidle');
+    await dismissNextOverlay(page);
+
+    const newOrderButton = page.getByTestId('new-order-button');
+    await expect(newOrderButton).toBeVisible();
+    await expect(newOrderButton).toBeEnabled();
+  });
+
+  test('should show disabled new order button when user lacks create scopes', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('grantedScopes', 'openid profile email orders.read');
+    });
+
+    await page.goto(`${BASE_URL}${ORDERS_ROUTE}`);
+    await page.waitForLoadState('networkidle');
+    await dismissNextOverlay(page);
+
+    const newOrderButton = page.getByTestId('new-order-button');
+    await expect(newOrderButton).toBeVisible();
+    await expect(newOrderButton).toBeDisabled();
   });
 });

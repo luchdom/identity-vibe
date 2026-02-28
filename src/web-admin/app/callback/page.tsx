@@ -17,7 +17,7 @@ export default function CallbackPage() {
         const result = await OAuth2Auth.handleCallback();
 
         // Update auth context
-        login(result.user, result.accessToken);
+        login(result.user);
 
         // Redirect to the intended page or dashboard
         const returnUrl = sessionStorage.getItem('returnUrl') || '/dashboard';

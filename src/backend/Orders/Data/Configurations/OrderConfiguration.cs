@@ -27,7 +27,5 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.DiscountAmount).HasPrecision(10, 2);
         builder.Property(o => o.TotalAmount).HasPrecision(10, 2);
         
-        builder.Property(o => o.CreatedAt).HasDefaultValueSql("datetime('now')");
-        builder.Property(o => o.UpdatedAt).HasDefaultValueSql("datetime('now')");
     }
 }

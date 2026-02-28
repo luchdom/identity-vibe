@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using AuthServer.Data;
 using AuthServer.Data.Entities;
@@ -67,6 +68,38 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
         authResult.Token.AccessToken.Should().NotBeNullOrWhiteSpace();
         authResult.Token.RefreshToken.Should().NotBeNullOrWhiteSpace();
         authResult.Token.TokenType.Should().Be("Bearer", because: "OpenIddict returns bearer tokens for the configured flows");
+    }
+
+    [Fact]
+    public async Task Authorize_WithStaleCookieAndDeletedUser_RedirectsToLogin_InsteadOfThrowing()
+    {
+        await using var host = await CreateHostAsync();
+
+        await CompleteAuthorizationAndGetCodeAsync(host.Client, "user@example.com", "User123!");
+        await DeleteUserAsync(host.ConnectionString, "user@example.com");
+
+        var authorizeUrl = CreateAuthorizeUrl();
+        var response = await host.Client.GetAsync(authorizeUrl);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.ToString().Should().Contain("/Account/Login");
+    }
+
+    [Fact]
+    public async Task Authorize_WithStaleCookieAndInactiveUser_RedirectsToLogin_InsteadOfThrowing()
+    {
+        await using var host = await CreateHostAsync();
+
+        await CompleteAuthorizationAndGetCodeAsync(host.Client, "user@example.com", "User123!");
+        await SetUserActiveAsync(host.ConnectionString, "user@example.com", isActive: false);
+
+        var authorizeUrl = CreateAuthorizeUrl();
+        var response = await host.Client.GetAsync(authorizeUrl);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Redirect);
+        response.Headers.Location.Should().NotBeNull();
+        response.Headers.Location!.ToString().Should().Contain("/Account/Login");
     }
 
     [Fact]
@@ -388,6 +421,27 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
     }
 
     [Fact]
+    public async Task AuthorizationCodePkce_UsesDbRoleScopeAssignments_ForUserRole()
+    {
+        await using var host = await CreateHostAsync();
+
+        await ReplaceRoleScopesAsync(host.ConnectionString, "User", "orders.read");
+
+        var authResult = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "user@example.com",
+            "User123!",
+            requestedScope: "openid profile email offline_access orders.read orders.write");
+
+        var grantedScopes = ParseScopes(authResult.Token);
+
+        grantedScopes.Should().Contain(["openid", "profile", "email"]);
+        grantedScopes.Should().Contain("orders.read");
+        grantedScopes.Should().NotContain("orders.write");
+        grantedScopes.Should().NotContain("profile.read");
+    }
+
+    [Fact]
     public async Task UserInfo_WithoutAccessToken_IsUnauthorizedOrForbidden()
     {
         await using var host = await CreateHostAsync();
@@ -424,6 +478,347 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         json.Should().NotContain("\"roles\"");
+    }
+
+    [Fact]
+    public async Task UserInfo_WithRolesScope_FiltersOutDisabledRoles()
+    {
+        await using var host = await CreateHostAsync();
+
+        await SetRoleActiveAsync(host.ConnectionString, "User", isActive: false);
+
+        var authResult = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "user@example.com",
+            "User123!",
+            requestedScope: "openid profile email roles");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/connect/userinfo");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authResult.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        json.Should().NotContain("\"roles\"");
+        json.Should().NotContain("User");
+    }
+
+    [Fact]
+    public async Task AdminRolesApi_AdminCanCreateUpdateAndAssignScopes()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.roles");
+
+        using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/api/admin/roles")
+        {
+            Content = CreateJsonContent(new
+            {
+                name = "Auditor",
+                description = "Read-only audit role",
+                isActive = true
+            })
+        };
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var createResponse = await host.Client.SendAsync(createRequest);
+        var createBody = await createResponse.Content.ReadAsStringAsync();
+
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created, because: createBody);
+
+        using var createdDoc = JsonDocument.Parse(createBody);
+        var roleId = createdDoc.RootElement.GetProperty("id").GetString();
+        roleId.Should().NotBeNullOrWhiteSpace();
+
+        using var scopesRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/roles/{roleId}/scopes")
+        {
+            Content = CreateJsonContent(new
+            {
+                scopeNames = new[] { "orders.read", "profile.read" }
+            })
+        };
+        scopesRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var scopesResponse = await host.Client.SendAsync(scopesRequest);
+        var scopesBody = await scopesResponse.Content.ReadAsStringAsync();
+
+        scopesResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: scopesBody);
+        scopesBody.Should().Contain("orders.read");
+        scopesBody.Should().Contain("profile.read");
+
+        using var updateRoleRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/roles/{roleId}")
+        {
+            Content = CreateJsonContent(new
+            {
+                description = "Temporarily disabled auditor role",
+                isActive = false
+            })
+        };
+        updateRoleRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var updateRoleResponse = await host.Client.SendAsync(updateRoleRequest);
+        var updateRoleBody = await updateRoleResponse.Content.ReadAsStringAsync();
+
+        updateRoleResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: updateRoleBody);
+        updateRoleBody.Should().Contain("\"isActive\":false");
+
+        using var getRoleRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/admin/roles/{roleId}");
+        getRoleRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+        var getRoleResponse = await host.Client.SendAsync(getRoleRequest);
+        var getRoleBody = await getRoleResponse.Content.ReadAsStringAsync();
+
+        getRoleResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: getRoleBody);
+        getRoleBody.Should().Contain("orders.read");
+        getRoleBody.Should().Contain("\"isActive\":false");
+    }
+
+    [Fact]
+    public async Task AdminRolesApi_AvailableScopes_ExcludesProtocolScopes()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.full");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/roles/available-scopes");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, because: body);
+        body.Should().Contain("orders.read");
+        body.Should().NotContain("\"name\":\"openid\"");
+        body.Should().NotContain("\"name\":\"roles\"");
+    }
+
+    [Fact]
+    public async Task AdminRolesApi_NonAdminToken_IsForbidden()
+    {
+        await using var host = await CreateHostAsync();
+        var userAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "user@example.com",
+            "User123!",
+            requestedScope: "openid profile email offline_access");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/roles");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AdminUsersApi_AdminCanCreateUpdateResetPasswordUpdateRolesAndDisableUser()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.users");
+
+        var createEmail = $"managed.user.{Guid.NewGuid():N}@example.com";
+
+        using var createRequest = new HttpRequestMessage(HttpMethod.Post, "/api/admin/users")
+        {
+            Content = CreateJsonContent(new
+            {
+                email = createEmail,
+                password = "Temp123!",
+                roleNames = new[] { "User" },
+                isActive = true
+            })
+        };
+        createRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var createResponse = await host.Client.SendAsync(createRequest);
+        var createBody = await createResponse.Content.ReadAsStringAsync();
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created, because: createBody);
+
+        using var createdUserDocument = JsonDocument.Parse(createBody);
+        var userId = createdUserDocument.RootElement.GetProperty("id").GetString();
+        userId.Should().NotBeNullOrWhiteSpace();
+
+        var updatedEmail = $"managed.updated.{Guid.NewGuid():N}@example.com";
+        using var updateRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{userId}")
+        {
+            Content = CreateJsonContent(new
+            {
+                email = updatedEmail,
+                phoneNumber = "+1-555-1234"
+            })
+        };
+        updateRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var updateResponse = await host.Client.SendAsync(updateRequest);
+        var updateBody = await updateResponse.Content.ReadAsStringAsync();
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: updateBody);
+        updateBody.Should().Contain(updatedEmail);
+
+        using var resetPasswordRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{userId}/password")
+        {
+            Content = CreateJsonContent(new
+            {
+                newPassword = "Temp456!"
+            })
+        };
+        resetPasswordRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var resetPasswordResponse = await host.Client.SendAsync(resetPasswordRequest);
+        var resetPasswordBody = await resetPasswordResponse.Content.ReadAsStringAsync();
+        resetPasswordResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: resetPasswordBody);
+
+        using var freshFactory = new CustomAuthServerFactory(host.ConnectionString);
+        using var freshClient = freshFactory.CreateHttpsClient(allowAutoRedirect: false);
+
+        var managedUserAuth = await RunAuthorizationCodeFlowAsync(
+            freshClient,
+            updatedEmail,
+            "Temp456!",
+            requestedScope: "openid profile email offline_access");
+
+        ParseScopes(managedUserAuth.Token).Should().Contain("orders.write");
+
+        using var updateRolesRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{userId}/roles")
+        {
+            Content = CreateJsonContent(new
+            {
+                roleNames = new[] { "Support" }
+            })
+        };
+        updateRolesRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var updateRolesResponse = await host.Client.SendAsync(updateRolesRequest);
+        var updateRolesBody = await updateRolesResponse.Content.ReadAsStringAsync();
+        updateRolesResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: updateRolesBody);
+        updateRolesBody.Should().Contain("Support");
+
+        var refreshAfterRoleUpdate = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = "web-admin",
+            ["refresh_token"] = managedUserAuth.Token.RefreshToken!
+        };
+
+        var refreshAfterRoleUpdateResponse = await freshClient.PostAsync("/connect/token", new FormUrlEncodedContent(refreshAfterRoleUpdate));
+        var refreshAfterRoleUpdateBody = await refreshAfterRoleUpdateResponse.Content.ReadAsStringAsync();
+        var refreshedToken = JsonSerializer.Deserialize<TokenResponse>(refreshAfterRoleUpdateBody, _jsonOptions);
+
+        refreshAfterRoleUpdateResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: refreshAfterRoleUpdateBody);
+        refreshedToken.Should().NotBeNull();
+        ParseScopes(refreshedToken!).Should().Contain("orders.read");
+        ParseScopes(refreshedToken!).Should().Contain("profile.read");
+        ParseScopes(refreshedToken!).Should().NotContain("orders.write");
+
+        using var disableRequest = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{userId}/status")
+        {
+            Content = CreateJsonContent(new
+            {
+                isActive = false
+            })
+        };
+        disableRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var disableResponse = await host.Client.SendAsync(disableRequest);
+        var disableBody = await disableResponse.Content.ReadAsStringAsync();
+        disableResponse.StatusCode.Should().Be(HttpStatusCode.OK, because: disableBody);
+        disableBody.Should().Contain("\"isActive\":false");
+
+        var refreshAfterDisableRequest = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = "web-admin",
+            ["refresh_token"] = managedUserAuth.Token.RefreshToken!
+        };
+
+        var refreshAfterDisableResponse = await freshClient.PostAsync("/connect/token", new FormUrlEncodedContent(refreshAfterDisableRequest));
+        var refreshAfterDisableBody = await refreshAfterDisableResponse.Content.ReadAsStringAsync();
+
+        refreshAfterDisableResponse.IsSuccessStatusCode.Should().BeFalse();
+        refreshAfterDisableBody.Should().Contain("invalid_grant");
+        refreshAfterDisableBody.Should().Contain("disabled");
+    }
+
+    [Fact]
+    public async Task AdminUsersApi_NonAdminToken_IsForbidden()
+    {
+        await using var host = await CreateHostAsync();
+        var userAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "user@example.com",
+            "User123!",
+            requestedScope: "openid profile email offline_access");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/admin/users");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", userAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task AdminUsersApi_SelfDisable_IsBlocked()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.users");
+
+        var adminUserId = await GetUserIdByEmailAsync(host.ConnectionString, "admin@example.com");
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{adminUserId}/status")
+        {
+            Content = CreateJsonContent(new
+            {
+                isActive = false
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, because: body);
+        body.Should().ContainEquivalentOf("cannot disable your own account");
+    }
+
+    [Fact]
+    public async Task AdminUsersApi_SelfRemovalOfAdminScopes_IsBlocked()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.users");
+
+        var adminUserId = await GetUserIdByEmailAsync(host.ConnectionString, "admin@example.com");
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/admin/users/{adminUserId}/roles")
+        {
+            Content = CreateJsonContent(new
+            {
+                roleNames = new[] { "User" }
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, because: body);
+        body.Should().ContainEquivalentOf("admin.users/admin.full");
     }
 
     private async Task<TestHostContext> CreateHostAsync()
@@ -543,6 +938,24 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
         await db.SaveChangesAsync();
     }
 
+    private static async Task DeleteUserAsync(string connectionString, string email)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var user = await db.Users.SingleAsync(u => u.Email == email);
+
+        db.UserClaims.RemoveRange(db.UserClaims.Where(uc => uc.UserId == user.Id));
+        db.UserLogins.RemoveRange(db.UserLogins.Where(ul => ul.UserId == user.Id));
+        db.UserTokens.RemoveRange(db.UserTokens.Where(ut => ut.UserId == user.Id));
+        db.UserRoles.RemoveRange(db.UserRoles.Where(ur => ur.UserId == user.Id));
+        db.Users.Remove(user);
+
+        await db.SaveChangesAsync();
+    }
+
     private static async Task SetUserRolesAsync(string connectionString, string email, params string[] roleNames)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -569,6 +982,75 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
 
         await db.UserRoles.AddRangeAsync(newRoles);
         await db.SaveChangesAsync();
+    }
+
+    private static async Task SetRoleActiveAsync(string connectionString, string roleName, bool isActive)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var role = await db.Roles.SingleAsync(r => r.Name == roleName);
+        role.IsActive = isActive;
+        role.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task ReplaceRoleScopesAsync(string connectionString, string roleName, params string[] scopes)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var role = await db.Roles.SingleAsync(r => r.Name == roleName);
+
+        var existing = db.RoleScopes.Where(rs => rs.RoleId == role.Id);
+        db.RoleScopes.RemoveRange(existing);
+
+        var rows = scopes.Distinct(StringComparer.Ordinal).Select(scope => new AppRoleScope
+        {
+            RoleId = role.Id,
+            ScopeName = scope
+        });
+
+        await db.RoleScopes.AddRangeAsync(rows);
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task<string> GetUserIdByEmailAsync(string connectionString, string email)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        return await db.Users
+            .Where(user => user.Email == email)
+            .Select(user => user.Id)
+            .SingleAsync();
+    }
+
+    private static StringContent CreateJsonContent(object payload) =>
+        new(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+    private static string CreateAuthorizeUrl(string requestedScope = "openid profile email offline_access orders.read")
+    {
+        var (_, codeChallenge) = PkceHelper.Create();
+        var state = Guid.NewGuid().ToString("N");
+        var redirectUri = $"{CustomAuthServerFactory.ExternalClientUrl}/callback";
+
+        return QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>
+        {
+            ["response_type"] = "code",
+            ["client_id"] = "web-admin",
+            ["redirect_uri"] = redirectUri,
+            ["scope"] = requestedScope,
+            ["state"] = state,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256"
+        });
     }
 
     private static string[] ParseScopes(TokenResponse token)

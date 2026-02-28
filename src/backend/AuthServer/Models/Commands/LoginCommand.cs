@@ -1,8 +1,8 @@
 namespace AuthServer.Models.Commands;
 
-public class LoginCommand
+public sealed record LoginCommand
 {
-    public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-    public bool RememberMe { get; set; }
+    public required string Email { get; init; }
+    public required string Password { get; init; }
+    public bool RememberMe { get; init; }
 }

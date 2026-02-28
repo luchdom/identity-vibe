@@ -6,14 +6,13 @@ using Microsoft.AspNetCore.Identity;
 using AuthServer.Configuration;
 using AuthServer.Services;
 using AuthServer.Services.Interfaces;
-using AuthServer.Repositories;
-using AuthServer.Repositories.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using OpenIddict.Validation.AspNetCore;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
 using Microsoft.Extensions.Options;
 using Serilog;
+using Shared.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -106,26 +105,38 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
         .Build();
+
+    options.AddPolicy(AuthServer.Controllers.AdminRolesController.AdminRolesManagementPolicy, policy =>
+        policy.RequireAuthenticatedUser()
+            .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+            .RequireAssertion(ctx => ctx.User.HasAnyScope("admin.roles", "admin.full")));
+
+    options.AddPolicy(AuthServer.Controllers.AdminUsersController.AdminUsersManagementPolicy, policy =>
+        policy.RequireAuthenticatedUser()
+            .AddAuthenticationSchemes(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)
+            .RequireAssertion(ctx => ctx.User.HasAnyScope("admin.users", "admin.full")));
 });
 
-// Configure scope options
-builder.Services.Configure<ScopeConfiguration>(
-    builder.Configuration.GetSection("ScopeConfiguration"));
-// Configure client options
-builder.Services.Configure<ClientConfiguration>(
-    builder.Configuration);
+// Configure and validate options
+builder.Services.AddSingleton<IValidateOptions<ScopeConfiguration>, ScopeConfigurationValidator>();
+builder.Services.AddOptions<ScopeConfiguration>()
+    .Bind(builder.Configuration.GetSection("ScopeConfiguration"))
+    .ValidateOnStart();
+
+builder.Services.AddSingleton<IValidateOptions<ClientConfiguration>, ClientConfigurationValidator>();
+builder.Services.AddOptions<ClientConfiguration>()
+    .Bind(builder.Configuration)
+    .ValidateOnStart();
 
 // Register services
 builder.Services.AddScoped<ScopeConfigurationService>();
 builder.Services.AddScoped<DatabaseSeeder>();
 builder.Services.AddScoped<IAuthorizationGrantService, AuthorizationGrantService>();
+builder.Services.AddScoped<IRoleAdminService, RoleAdminService>();
+builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 
 // Clean Architecture Services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-builder.Services.AddScoped<IUserService, UserService>();
-
-// Clean Architecture Repositories
-builder.Services.AddScoped<IUserRepository, UserRepository>();
 
 // Add logging services
 builder.Services.AddLoggingServices();

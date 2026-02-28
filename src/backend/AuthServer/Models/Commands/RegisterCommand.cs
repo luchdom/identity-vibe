@@ -1,8 +1,8 @@
 namespace AuthServer.Models.Commands;
 
-public class RegisterCommand
+public sealed record RegisterCommand
 {
-    public string Email { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-    public string ConfirmPassword { get; set; } = string.Empty;
+    public required string Email { get; init; }
+    public required string Password { get; init; }
+    public required string ConfirmPassword { get; init; }
 }

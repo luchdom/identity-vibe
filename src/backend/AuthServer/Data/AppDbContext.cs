@@ -14,6 +14,8 @@ public class AppDbContext : IdentityDbContext<
     AppRoleClaim,
     AppUserToken>
 {
+    public DbSet<AppRoleScope> RoleScopes => Set<AppRoleScope>();
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {

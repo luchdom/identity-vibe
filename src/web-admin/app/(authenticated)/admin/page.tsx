@@ -1,16 +1,17 @@
 'use client';
 
-import { AuthGuard, isAdmin } from '@/components/auth/AuthGuard';
+import { AuthGuard } from '@/components/auth/AuthGuard';
+import { canAccessAdminPanel } from '@/lib/authz';
 import { useAuth } from '@/contexts/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Shield, Users, Settings, Database } from 'lucide-react';
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, scopes } = useAuth();
 
   return (
-    <AuthGuard requireAuth={true} requiredRoles={['Admin', 'ServiceIdentity']}>
+    <AuthGuard requireAuth={true} requiredScopes={['admin.full']}>
       <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
         <div className="flex items-center justify-between">
           <div>
@@ -24,7 +25,7 @@ export default function AdminPage() {
               <Shield className="w-3 h-3" />
               Admin Access
             </Badge>
-            {user && isAdmin(user) && (
+            {user && canAccessAdminPanel(scopes) && (
               <Badge variant="outline">
                 {user.roles.join(', ')}
               </Badge>
@@ -126,11 +127,11 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                This is a demo admin page showing role-based access control.
-                Only users with 'Admin' or 'ServiceIdentity' roles can access this page.
+                This is a demo admin page showing scope-based access control.
+                Only users with the <code className="font-mono">admin.full</code> scope can access this page.
               </p>
               <div className="pt-2">
-                <Badge variant="outline" className="mr-2">Admin Only</Badge>
+                <Badge variant="outline" className="mr-2">admin.full</Badge>
                 <Badge variant="outline">Protected Route</Badge>
               </div>
             </CardContent>

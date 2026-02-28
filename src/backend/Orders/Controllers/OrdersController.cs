@@ -29,9 +29,10 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(userId, correlationId);
+        var command = request.ToDomain(requiredUserId, correlationId);
         var result = await ordersService.CreateOrderAsync(command);
 
         if (result.IsFailure)
@@ -46,7 +47,7 @@ public class OrdersController(
             var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                userId,
+                requiredUserId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
                 201,
@@ -74,11 +75,12 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         // Validate pagination parameters
         (page, pageSize) = ValidationExtensions.ValidatePagination(page, pageSize);
 
-        var query = OrderRequestMappers.ToDomain(userId, page, pageSize, status);
+        var query = OrderRequestMappers.ToDomain(requiredUserId, page, pageSize, status);
         var result = await ordersService.GetOrdersAsync(query);
 
         if (result.IsFailure)
@@ -126,9 +128,10 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         var isAdmin = HttpContext.IsAdmin();
-        var query = OrderRequestMappers.ToDomain(id, userId, isAdmin);
+        var query = OrderRequestMappers.ToDomain(id, requiredUserId, isAdmin);
         var result = await ordersService.GetOrderByIdAsync(query);
 
         if (result.IsFailure)
@@ -151,9 +154,10 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(id, userId, correlationId);
+        var command = request.ToDomain(id, requiredUserId, correlationId);
         var result = await ordersService.UpdateOrderAsync(command);
 
         if (result.IsFailure)
@@ -168,7 +172,7 @@ public class OrdersController(
             var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                userId,
+                requiredUserId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
                 200,
@@ -193,10 +197,11 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         request ??= new CancelOrderRequest();
         var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(id, userId, correlationId);
+        var command = request.ToDomain(id, requiredUserId, correlationId);
         var result = await ordersService.CancelOrderAsync(command);
 
         if (result.IsFailure)
@@ -211,7 +216,7 @@ public class OrdersController(
             var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                userId,
+                requiredUserId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
                 200,
@@ -236,9 +241,10 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
         var isAdmin = HttpContext.IsAdmin();
-        var query = OrderRequestMappers.ToStatusQuery(id, userId, isAdmin);
+        var query = OrderRequestMappers.ToStatusQuery(id, requiredUserId, isAdmin);
         var result = await ordersService.GetOrderStatusAsync(query);
 
         if (result.IsFailure)
@@ -261,8 +267,9 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
-        var command = request.ToDomain(id, userId);
+        var command = request.ToDomain(id, requiredUserId);
         var result = await ordersService.UpdateOrderStatusAsync(command);
 
         if (result.IsFailure)
@@ -285,8 +292,9 @@ public class OrdersController(
         var userIdResult = ResultExtensions.RequireUserId<object>(userId);
         if (userIdResult.IsFailure)
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        var requiredUserId = userId!;
 
-        var command = request.ToDomain(id, userId);
+        var command = request.ToDomain(id, requiredUserId);
         var result = await ordersService.AddTrackingNumberAsync(command);
 
         if (result.IsFailure)

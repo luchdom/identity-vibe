@@ -10,7 +10,5 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
     {
         builder.HasKey(c => c.Id);
         builder.HasIndex(c => c.Email).IsUnique();
-        builder.Property(c => c.CreatedAt).HasDefaultValueSql("datetime('now')");
-        builder.Property(c => c.UpdatedAt).HasDefaultValueSql("datetime('now')");
     }
 }

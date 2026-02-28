@@ -20,6 +20,7 @@ Location:
 - Real PostgreSQL persistence/seeding
 - OAuth2/OIDC auth flows (`authorize`, login, token, userinfo, refresh, client credentials)
 - RBAC token issuance behavior (role -> scope mapping for user flows)
+- DB-backed role -> scope assignment behavior (AuthServer admin edits reflected in token issuance)
 - Refresh-token permission re-evaluation after role changes
 
 These tests are intended to catch wiring/config/auth regressions that unit tests typically miss.
@@ -58,8 +59,11 @@ Use the right test level for each RBAC concern:
 
 - `AuthServer.IntegrationTests`
   - validate role -> scope issuance
-  - validate refresh-token permission recomputation (role upgrades/downgrades)
-  - validate protocol behavior (`invalid_grant`, `unsupported_grant_type`, etc.)
+- validate DB-edited role-scope assignments affect token issuance
+- validate refresh-token permission recomputation (role upgrades/downgrades)
+- validate roles/permissions admin APIs (`/api/admin/roles/*`)
+- validate user-management admin APIs (`/api/admin/users/*`) including create/edit/roles/status/password-reset and self-protection guardrails
+- validate protocol behavior (`invalid_grant`, `unsupported_grant_type`, etc.)
 - `Shared.UnitTests`
   - validate claim parsing helpers (`scope` repeated vs space-separated)
   - validate coarse helper behavior (for example `IsAdmin()`)
@@ -177,4 +181,26 @@ Shared claims/unit tests:
 
 ```bash
 dotnet test tests/backend/Shared.UnitTests/Shared.UnitTests.csproj
+```
+
+Orders seeder/unit tests:
+
+```bash
+dotnet test tests/backend/Orders.UnitTests/Orders.UnitTests.csproj
+```
+
+Notes:
+- These tests validate JSON seed import behavior (`IfEmpty` skip, customer reuse, totals, and invalid dataset failure).
+- If an `Orders.exe` process is running and locks build outputs locally, use an alternate output directory:
+
+```bash
+dotnet test tests/backend/Orders.UnitTests/Orders.UnitTests.csproj -p:OutDir=C:\\temp\\orders-unit-tests\\
+```
+
+Frontend Playwright smoke (requires local `web-admin` dev server):
+
+```bash
+cd src/web-admin
+npx playwright test tests/roles-permissions-page.spec.ts
+npx playwright test tests/users-management-page.spec.ts
 ```

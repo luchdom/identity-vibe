@@ -25,7 +25,8 @@ public class AuthorizationController(
     UserManager<AppUser> userManager,
     SignInManager<AppUser> signInManager,
     ScopeConfigurationService scopeConfigService,
-    IAuthorizationGrantService authorizationGrantService) : Controller
+    IAuthorizationGrantService authorizationGrantService,
+    ILogger<AuthorizationController> logger) : Controller
 {
     private static readonly HashSet<string> ProtocolScopes = new(StringComparer.Ordinal)
     {
@@ -43,6 +44,10 @@ public class AuthorizationController(
     {
         var request = HttpContext.GetOpenIddictServerRequest() ??
             throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
+        if (string.IsNullOrEmpty(request.ClientId))
+        {
+            throw new InvalidOperationException("The client identifier cannot be retrieved.");
+        }
 
         // Try to retrieve the user principal
         var result = await HttpContext.AuthenticateAsync(IdentityConstants.ApplicationScheme);
@@ -50,18 +55,31 @@ public class AuthorizationController(
         // If the user is not authenticated, redirect to the login page
         if (!result.Succeeded)
         {
-            return Challenge(
-                authenticationSchemes: IdentityConstants.ApplicationScheme,
-                properties: new AuthenticationProperties
-                {
-                    RedirectUri = Request.PathBase + Request.Path + QueryString.Create(
-                        Request.HasFormContentType ? Request.Form.ToList() : Request.Query.ToList())
-                });
+            return BuildLoginChallenge();
         }
 
         // Retrieve the user from the result
-        var user = await userManager.GetUserAsync(result.Principal) ??
-            throw new InvalidOperationException("The user details cannot be retrieved.");
+        var user = await userManager.GetUserAsync(result.Principal);
+        if (user == null)
+        {
+            logger.LogWarning(
+                "Stale identity cookie detected during /connect/authorize. User could not be loaded. ClientId={ClientId}",
+                request.ClientId);
+
+            await signInManager.SignOutAsync();
+            return BuildLoginChallenge();
+        }
+
+        if (!user.IsActive)
+        {
+            logger.LogWarning(
+                "Inactive user attempted /connect/authorize using an existing identity cookie. UserId={UserId}, ClientId={ClientId}",
+                user.Id,
+                request.ClientId);
+
+            await signInManager.SignOutAsync();
+            return BuildLoginChallenge();
+        }
 
         // Retrieve the application details
         var application = await applicationManager.FindByClientIdAsync(request.ClientId) ??
@@ -74,9 +92,12 @@ public class AuthorizationController(
         // In production, you might want to show a consent page here
 
         // Create authorization if it doesn't exist
+        var clientAuthorizationId = await applicationManager.GetIdAsync(application)
+            ?? throw new InvalidOperationException("The application identifier cannot be retrieved.");
+
         var authorizations = await authorizationManager.FindAsync(
             subject: user.Id,
-            client: await applicationManager.GetIdAsync(application),
+            client: clientAuthorizationId,
             status: Statuses.Valid,
             type: AuthorizationTypes.Permanent,
             scopes: request.GetScopes()).ToListAsync();
@@ -87,7 +108,7 @@ public class AuthorizationController(
             authorization = await authorizationManager.CreateAsync(
                 principal: principal,
                 subject: user.Id,
-                client: await applicationManager.GetIdAsync(application),
+                client: clientAuthorizationId,
                 type: AuthorizationTypes.Permanent,
                 scopes: principal.GetScopes());
         }
@@ -215,6 +236,10 @@ public class AuthorizationController(
         }
 
         var userId = principal.GetClaim(Claims.Subject);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Challenge(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
         var user = await userManager.FindByIdAsync(userId);
         if (user == null)
         {
@@ -236,7 +261,7 @@ public class AuthorizationController(
         // Add roles if the roles scope was granted
         if (principal.HasScope(Scopes.Roles))
         {
-            var roles = await userManager.GetRolesAsync(user);
+            var roles = await scopeConfigService.GetActiveRoleNamesAsync(user);
             if (roles.Any())
             {
                 claims["roles"] = roles;
@@ -277,7 +302,7 @@ public class AuthorizationController(
         }
 
         // Add roles
-        var roles = await userManager.GetRolesAsync(user);
+        var roles = await scopeConfigService.GetActiveRoleNamesAsync(user);
         foreach (var role in roles)
         {
             identity.AddClaim(Claims.Role, role);
@@ -353,6 +378,17 @@ public class AuthorizationController(
         }
 
         return new AuthenticationProperties(properties);
+    }
+
+    private IActionResult BuildLoginChallenge()
+    {
+        return Challenge(
+            authenticationSchemes: IdentityConstants.ApplicationScheme,
+            properties: new AuthenticationProperties
+            {
+                RedirectUri = Request.PathBase + Request.Path + QueryString.Create(
+                    Request.HasFormContentType ? Request.Form.ToList() : Request.Query.ToList())
+            });
     }
 
     private static bool IsProtocolScope(string scope) => ProtocolScopes.Contains(scope);

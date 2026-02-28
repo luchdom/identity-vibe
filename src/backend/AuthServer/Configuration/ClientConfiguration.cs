@@ -1,6 +1,6 @@
 namespace AuthServer.Configuration;
 
-public class ClientConfiguration
+public sealed record ClientConfiguration
 {
-    public List<ClientSettings> Clients { get; set; } = new();
+    public required List<ClientSettings> Clients { get; init; }
 }

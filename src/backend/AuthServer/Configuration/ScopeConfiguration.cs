@@ -1,7 +1,7 @@
 namespace AuthServer.Configuration;
 
-public record ScopeConfiguration
+public sealed record ScopeConfiguration
 {
-    public List<ScopeSettings> Scopes { get; init; } = new();
-    public UserScopes UserScopes { get; init; } = new();
+    public required List<ScopeSettings> Scopes { get; init; }
+    public required UserScopes UserScopes { get; init; }
 };

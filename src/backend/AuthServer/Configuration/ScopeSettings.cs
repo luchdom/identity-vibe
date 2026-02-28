@@ -1,9 +1,9 @@
 namespace AuthServer.Configuration;
 
-public class ScopeSettings
+public sealed record ScopeSettings
 {
-    public string Name { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public List<string> Resources { get; set; } = new();
+    public required string Name { get; init; }
+    public required string DisplayName { get; init; }
+    public required string Description { get; init; }
+    public List<string> Resources { get; init; } = [];
 }

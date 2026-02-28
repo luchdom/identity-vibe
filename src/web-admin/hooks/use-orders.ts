@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ordersApi } from '@/lib/orders-api';
+import { canViewAllOrders } from '@/lib/authz';
 import { useAuth } from '@/contexts/auth-context';
 import type { OrderListResponse, OrdersQueryParams, OrderStatus } from '@/types/orders';
 
@@ -13,7 +14,7 @@ interface UseOrdersResult {
 }
 
 export function useOrders(params?: OrdersQueryParams): UseOrdersResult {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, scopes } = useAuth();
   const [data, setData] = useState<OrderListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function useOrders(params?: OrdersQueryParams): UseOrdersResult {
       setError(null);
       
       // Check if user is admin to determine which endpoint to use
-      const isAdmin = ordersApi.isAdmin();
+      const isAdmin = canViewAllOrders(scopes);
       const response = isAdmin 
         ? await ordersApi.getAllOrders(params)
         : await ordersApi.getOrders(params);
@@ -41,7 +42,7 @@ export function useOrders(params?: OrdersQueryParams): UseOrdersResult {
     } finally {
       setLoading(false);
     }
-  }, [params, authLoading, isAuthenticated]);
+  }, [params, authLoading, isAuthenticated, scopes]);
 
   useEffect(() => {
     fetchOrders();

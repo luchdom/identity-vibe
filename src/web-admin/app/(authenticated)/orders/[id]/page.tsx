@@ -22,6 +22,15 @@ import { ordersApi } from "@/lib/orders-api"
 import { OrderStatus } from "@/types/orders"
 import { ArrowLeft, Package, User, CreditCard, Truck } from "lucide-react"
 
+function formatMoney(value: unknown): string {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return '--';
+  }
+
+  return parsed.toFixed(2);
+}
+
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -219,26 +228,26 @@ export default function OrderDetailPage() {
             <CardContent className="space-y-3">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span>${order.subtotalAmount.toFixed(2)}</span>
+                <span>${formatMoney(order.subtotalAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Tax:</span>
-                <span>${order.taxAmount.toFixed(2)}</span>
+                <span>${formatMoney(order.taxAmount)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Shipping:</span>
-                <span>${order.shippingAmount.toFixed(2)}</span>
+                <span>${formatMoney(order.shippingAmount)}</span>
               </div>
               {order.discountAmount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount:</span>
-                  <span>-${order.discountAmount.toFixed(2)}</span>
+                  <span>-${formatMoney(order.discountAmount)}</span>
                 </div>
               )}
               <Separator />
               <div className="flex justify-between font-bold">
                 <span>Total:</span>
-                <span>${order.totalAmount.toFixed(2)} {order.currency}</span>
+                <span>${formatMoney(order.totalAmount)} {order.currency}</span>
               </div>
               {order.paymentMethod && (
                 <p className="text-sm text-muted-foreground">
@@ -304,9 +313,9 @@ export default function OrderDetailPage() {
                       )}
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">${item.totalPrice.toFixed(2)}</p>
+                      <p className="font-medium">${formatMoney(item.totalPrice)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {item.quantity} × ${item.unitPrice.toFixed(2)}
+                        {item.quantity} × ${formatMoney(item.unitPrice)}
                       </p>
                     </div>
                   </div>

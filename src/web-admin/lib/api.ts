@@ -105,10 +105,14 @@ const attachInterceptors = (client: typeof authApi, clientName: string) => {
           );
 
           const { access_token: accessToken, refresh_token: newRefreshToken } = response.data;
+          const grantedScope = typeof response.data.scope === 'string' ? response.data.scope : null;
           
           localStorage.setItem('accessToken', accessToken);
           if (newRefreshToken) {
             localStorage.setItem('refreshToken', newRefreshToken);
+          }
+          if (grantedScope) {
+            localStorage.setItem('grantedScopes', grantedScope);
           }
 
           // Retry the original request
@@ -120,6 +124,7 @@ const attachInterceptors = (client: typeof authApi, clientName: string) => {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+        localStorage.removeItem('grantedScopes');
 
         // Emit session expired event for the AuthProvider to handle
         authEvents.dispatchEvent(new CustomEvent('sessionExpired'));

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using System.Runtime.CompilerServices;
 
 namespace AuthServer.IntegrationTests.Infrastructure;
 
@@ -39,8 +40,30 @@ public sealed class CustomAuthServerFactory(string connectionString) : WebApplic
         });
     }
 
-    private static string ResolveAuthServerContentRoot()
+    private static string ResolveAuthServerContentRoot([CallerFilePath] string callerFilePath = "")
     {
+        var cwdCandidate = Path.Combine(Directory.GetCurrentDirectory(), "src", "backend", "AuthServer");
+        if (File.Exists(Path.Combine(cwdCandidate, "AuthServer.csproj")))
+        {
+            return cwdCandidate;
+        }
+
+        var sourceDir = new DirectoryInfo(Path.GetDirectoryName(callerFilePath)!);
+        while (sourceDir is not null)
+        {
+            var solutionPath = Path.Combine(sourceDir.FullName, "ArchZ.sln");
+            if (File.Exists(solutionPath))
+            {
+                var authRoot = Path.Combine(sourceDir.FullName, "src", "backend", "AuthServer");
+                if (File.Exists(Path.Combine(authRoot, "AuthServer.csproj")))
+                {
+                    return authRoot;
+                }
+            }
+
+            sourceDir = sourceDir.Parent;
+        }
+
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
         while (directory is not null)
@@ -57,4 +80,3 @@ public sealed class CustomAuthServerFactory(string connectionString) : WebApplic
         throw new DirectoryNotFoundException("Could not locate repository root containing ArchZ.sln.");
     }
 }
-

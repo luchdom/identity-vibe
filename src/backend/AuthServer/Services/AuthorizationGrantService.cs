@@ -38,6 +38,13 @@ public sealed class AuthorizationGrantService(
         }
 
         var userId = authenticateResult.Principal.GetClaim(Claims.Subject);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return GrantFlowResult.Forbid(
+                Errors.InvalidGrant,
+                "The authorization code does not contain a valid user identifier.");
+        }
+
         var user = await userManager.FindByIdAsync(userId);
         if (user == null)
         {
@@ -83,8 +90,14 @@ public sealed class AuthorizationGrantService(
             nameType: Claims.Name,
             roleType: Claims.Role);
 
-        identity.AddClaim(Claims.Subject, await applicationManager.GetClientIdAsync(application));
-        identity.AddClaim(Claims.Name, await applicationManager.GetDisplayNameAsync(application) ?? string.Empty);
+        var clientId = await applicationManager.GetClientIdAsync(application) ?? request.ClientId;
+        if (string.IsNullOrEmpty(clientId))
+        {
+            return GrantFlowResult.Forbid(Errors.InvalidClient);
+        }
+
+        identity.AddClaim(Claims.Subject, clientId);
+        identity.AddClaim(Claims.Name, await applicationManager.GetDisplayNameAsync(application) ?? clientId);
 
         var validScopes = new List<string>();
         foreach (var scope in request.GetScopes())
@@ -156,7 +169,7 @@ public sealed class AuthorizationGrantService(
             identity.AddClaim(Claims.Email, user.Email);
         }
 
-        var roles = await userManager.GetRolesAsync(user);
+        var roles = await scopeConfigService.GetActiveRoleNamesAsync(user);
         foreach (var role in roles)
         {
             identity.AddClaim(Claims.Role, role);

@@ -1,7 +1,7 @@
 namespace AuthServer.Configuration;
 
-public record UserScopes
+public sealed record UserScopes
 {
-    public string[] DefaultScopes { get; init; } = [];
-    public Dictionary<string, string[]> RoleScopes { get; init; } = new();
+    public required string[] DefaultScopes { get; init; }
+    public required Dictionary<string, string[]> RoleScopes { get; init; }
 };

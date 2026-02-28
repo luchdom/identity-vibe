@@ -8,6 +8,8 @@ export class OAuth2Auth {
   private static readonly CLIENT_ID = 'web-admin';
   private static readonly AUTH_SERVER_URL = process.env.NEXT_PUBLIC_AUTH_URL || 'http://localhost:5000';
   private static readonly STORAGE_KEY_PREFIX = 'oauth2_';
+  private static readonly GRANTED_SCOPES_STORAGE_KEY = 'grantedScopes';
+  private static readonly DEFAULT_AUTH_SCOPES = 'openid profile email offline_access roles';
 
   /**
    * Get redirect URI dynamically (client-side only)
@@ -104,7 +106,7 @@ export class OAuth2Auth {
       response_type: 'code',
       client_id: this.CLIENT_ID,
       redirect_uri: this.getRedirectUri(),
-      //scope: 'openid profile email offline_access orders.read orders.write profile.read profile.write',
+      scope: this.DEFAULT_AUTH_SCOPES,
       state: state,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
@@ -159,6 +161,7 @@ export class OAuth2Auth {
       if (tokenResponse.refreshToken) {
         localStorage.setItem('refreshToken', tokenResponse.refreshToken);
       }
+      this.setGrantedScopes(tokenResponse.scope);
 
       // Get user profile
       const userProfile = await this.getUserProfile(tokenResponse.accessToken);
@@ -189,7 +192,7 @@ export class OAuth2Auth {
   private static async exchangeCodeForToken(
     code: string,
     codeVerifier: string
-  ): Promise<{ accessToken: string; refreshToken?: string; idToken?: string }> {
+  ): Promise<{ accessToken: string; refreshToken?: string; idToken?: string; scope?: string }> {
     const formData = new URLSearchParams({
       grant_type: 'authorization_code',
       client_id: this.CLIENT_ID,
@@ -209,6 +212,7 @@ export class OAuth2Auth {
         accessToken: response.data.access_token,
         refreshToken: response.data.refresh_token,
         idToken: response.data.id_token,
+        scope: response.data.scope,
       };
     } catch (error) {
       if (error instanceof AxiosError) {
@@ -248,7 +252,7 @@ export class OAuth2Auth {
   /**
    * Refresh access token using refresh token
    */
-  static async refreshToken(): Promise<{ accessToken: string; refreshToken?: string }> {
+  static async refreshToken(): Promise<{ accessToken: string; refreshToken?: string; scope?: string }> {
     const refreshToken = localStorage.getItem('refreshToken');
 
     if (!refreshToken) {
@@ -273,10 +277,14 @@ export class OAuth2Auth {
       if (response.data.refresh_token) {
         localStorage.setItem('refreshToken', response.data.refresh_token);
       }
+      if (typeof response.data.scope === 'string') {
+        localStorage.setItem(this.GRANTED_SCOPES_STORAGE_KEY, response.data.scope);
+      }
 
       return {
         accessToken: response.data.access_token,
         refreshToken: response.data.refresh_token,
+        scope: response.data.scope,
       };
     } catch (error) {
       if (error instanceof AxiosError) {
@@ -301,6 +309,7 @@ export class OAuth2Auth {
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('idToken');
     localStorage.removeItem('user');
+    localStorage.removeItem(this.GRANTED_SCOPES_STORAGE_KEY);
 
     // Clear session storage
     this.clearFlowData();
@@ -347,6 +356,18 @@ export class OAuth2Auth {
     }
   }
 
+  static getScopes(): string[] {
+    const scopeValue = localStorage.getItem(this.GRANTED_SCOPES_STORAGE_KEY);
+    if (!scopeValue) {
+      return [];
+    }
+
+    return scopeValue
+      .split(' ')
+      .map(scope => scope.trim())
+      .filter(Boolean);
+  }
+
   /**
    * Get user profile from server (moved from auth-api.ts)
    */
@@ -365,20 +386,15 @@ export class OAuth2Auth {
     }
   }
 
-  /**
-   * Check if user has specific role
-   */
-  static hasRole(user: any | null, role: string): boolean {
-    return user?.roles?.includes(role) || false;
+  static setGrantedScopes(scopeValue?: string | null): void {
+    if (!scopeValue) {
+      localStorage.removeItem(this.GRANTED_SCOPES_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(this.GRANTED_SCOPES_STORAGE_KEY, scopeValue);
   }
 
-  /**
-   * Check if user is admin
-   */
-  static isAdmin(user?: any | null): boolean {
-    const currentUser = user || this.getUser();
-    return this.hasRole(currentUser, 'Admin') || this.hasRole(currentUser, 'ServiceIdentity');
-  }
 }
 
 export default OAuth2Auth;

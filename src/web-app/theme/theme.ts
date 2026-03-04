@@ -44,7 +44,7 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
       divider: isLight ? 'rgba(145, 158, 171, 0.20)' : 'rgba(145, 158, 171, 0.16)',
     },
     shape: {
-      borderRadius: 20,
+      borderRadius: 8,
     },
     typography: {
       fontFamily,
@@ -116,20 +116,32 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
         },
         styleOverrides: {
           root: {
-            borderRadius: 14,
-            paddingInline: 18,
+            borderRadius: 10,
+            paddingInline: 16,
+          },
+          sizeLarge: {
+            minHeight: 48,
+          },
+          containedInherit: {
+            color: isLight ? '#FFFFFF' : '#1C252E',
+            backgroundColor: isLight ? '#1C252E' : '#E5E7EB',
+            '&:hover': {
+              backgroundColor: isLight ? '#1C252E' : '#E5E7EB',
+              filter: 'brightness(0.94)',
+            },
           },
           containedPrimary: {
-            boxShadow: isLight
-              ? '0 8px 18px rgba(32, 101, 209, 0.22)'
-              : '0 10px 24px rgba(32, 101, 209, 0.24)',
+            boxShadow: 'none',
+            '&:hover': {
+              boxShadow: 'none',
+            },
           },
         },
       },
       MuiCard: {
         styleOverrides: {
           root: {
-            borderRadius: 24,
+            borderRadius: 16,
             border: '1px solid',
             borderColor: isLight ? 'rgba(145, 158, 171, 0.18)' : 'rgba(145, 158, 171, 0.12)',
             boxShadow: isLight
@@ -145,14 +157,21 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
             backgroundImage: 'none',
           },
           rounded: {
-            borderRadius: 24,
+            borderRadius: 16,
           },
         },
       },
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            height: 24,
+            borderRadius: 6,
+            fontSize: '0.75rem',
+            fontWeight: 700,
+          },
+          label: {
+            paddingLeft: 8,
+            paddingRight: 8,
           },
         },
       },
@@ -166,7 +185,17 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
       MuiListItemButton: {
         styleOverrides: {
           root: {
-            borderRadius: 16,
+            borderRadius: 6,
+          },
+        },
+      },
+      MuiTableCell: {
+        styleOverrides: {
+          head: {
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: isLight ? '#637381' : '#9CA3AF',
+            backgroundColor: isLight ? '#F4F6F8' : 'rgba(145, 158, 171, 0.08)',
           },
         },
       },

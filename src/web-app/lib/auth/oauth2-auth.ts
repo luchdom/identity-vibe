@@ -59,6 +59,29 @@ function clearFlowData(): void {
   });
 }
 
+function postLogoutRedirect(idToken: string): void {
+  const form = document.createElement('form');
+
+  form.method = 'POST';
+  form.action = `${AUTH_SERVER_URL}/connect/logout`;
+  form.style.display = 'none';
+
+  const idTokenInput = document.createElement('input');
+  idTokenInput.type = 'hidden';
+  idTokenInput.name = 'id_token_hint';
+  idTokenInput.value = idToken;
+  form.appendChild(idTokenInput);
+
+  const redirectInput = document.createElement('input');
+  redirectInput.type = 'hidden';
+  redirectInput.name = 'post_logout_redirect_uri';
+  redirectInput.value = window.location.origin;
+  form.appendChild(redirectInput);
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
 async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
@@ -284,12 +307,7 @@ export class OAuth2Auth {
     clearFlowData();
 
     if (idToken) {
-      const params = new URLSearchParams({
-        id_token_hint: idToken,
-        post_logout_redirect_uri: window.location.origin,
-      });
-
-      window.location.href = `${AUTH_SERVER_URL}/connect/logout?${params.toString()}`;
+      postLogoutRedirect(idToken);
       return;
     }
 

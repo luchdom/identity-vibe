@@ -15,6 +15,7 @@ import ListItemText from '@mui/material/ListItemText';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 
 import { Icon } from '@iconify/react';
 
@@ -101,7 +102,9 @@ function SidebarContent({ onNavigate }: SidebarContentProps) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
         <List disablePadding sx={{ display: 'grid', gap: 0.5 }}>
           {primaryNavItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = item.href === '/orders'
+              ? pathname === '/orders' || pathname.startsWith('/orders/')
+              : pathname === item.href;
 
             return (
               <ListItem key={item.href} disablePadding>
@@ -110,20 +113,22 @@ function SidebarContent({ onNavigate }: SidebarContentProps) {
                   href={item.href}
                   onClick={onNavigate}
                   sx={{
-                    minHeight: 56,
-                    px: 1.25,
-                    py: 1,
-                    color: isActive ? 'primary.contrastText' : 'text.primary',
-                    bgcolor: isActive ? 'primary.main' : 'transparent',
-                    boxShadow: isActive ? '0 10px 20px rgba(32, 101, 209, 0.24)' : 'none',
+                    minHeight: 44,
+                    px: 1.5,
+                    py: 0.75,
+                    color: isActive ? 'primary.main' : 'text.secondary',
+                    bgcolor: isActive ? (theme) => alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                    boxShadow: 'none',
                     '&:hover': {
-                      bgcolor: isActive ? 'primary.main' : 'action.hover',
+                      bgcolor: isActive
+                        ? (theme) => alpha(theme.palette.primary.main, 0.14)
+                        : 'action.hover',
                     },
                   }}
                 >
                   <ListItemIcon
                     sx={{
-                      minWidth: 38,
+                      minWidth: 34,
                       color: 'inherit',
                     }}
                   >
@@ -131,16 +136,9 @@ function SidebarContent({ onNavigate }: SidebarContentProps) {
                   </ListItemIcon>
                   <ListItemText
                     primary={item.title}
-                    secondary={isActive ? item.description : undefined}
                     primaryTypographyProps={{
-                      fontWeight: isActive ? 700 : 600,
-                    }}
-                    secondaryTypographyProps={{
-                      sx: {
-                        mt: 0.25,
-                        color: 'inherit',
-                        opacity: 0.82,
-                      },
+                      fontSize: 14,
+                      fontWeight: isActive ? 700 : 500,
                     }}
                   />
                 </ListItemButton>

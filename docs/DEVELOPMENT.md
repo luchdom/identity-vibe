@@ -40,6 +40,41 @@ NEXT_PUBLIC_ORDERS_URL=http://localhost:5003
 NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
 ```
 
+## Frontend UI Rules Quick Checklist (`src/web-app`)
+
+Use this checklist before implementing or reviewing a new list/admin screen.
+
+1. Density and controls:
+- compact/Minimal style by default
+- toolbar controls are `small`, `outlined`, `36px` height
+- subtle radius (`6px` to `8px`)
+
+2. Toolbar behavior:
+- placeholders only (no floating labels in toolbars)
+- search input + filter icon button + optional clear
+- avoid mixed control heights and mixed labeling patterns in the same toolbar
+
+3. Page composition:
+- compact header (title + breadcrumb + right action)
+- status tabs with thin indicator + soft count badges
+- compact table rows with sortable headers and rows-per-page
+
+4. Actions and feedback:
+- row actions: quick edit + 3-dot overflow
+- destructive actions in overflow menus with confirmation when irreversible
+- status/role badges should be soft labels
+
+5. Forms and dialogs:
+- use outlined MUI fields with floating labels in create/edit forms
+- keep toolbar rules separate from form/dialog rules
+
+6. UX validation:
+- verify consistency with existing `web-app` patterns
+- verify clarity/usability of labels and actions
+- if a requirement is ambiguous or materially affects usability, ask the prompter for clarification before finalizing implementation
+
+See `docs/FRONTEND.md` for the full locked UI system rules.
+
 ## Auth + Orders Smoke Test
 
 1. Open `http://localhost:3000`

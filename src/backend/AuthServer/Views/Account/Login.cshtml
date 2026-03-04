@@ -5,37 +5,33 @@
 }
 
 <div class="auth-header">
-    <h1>Login to your account</h1>
-    <p>Enter your email below to login to your account</p>
+    <h1>Sign in</h1>
+    <p>
+        Don&apos;t have an account?
+        <a href="@Url.Action("Register", "Account")">Get started</a>
+    </p>
 </div>
 
 <div asp-validation-summary="All" class="validation-summary"></div>
 
-<form method="post">
+<form method="post" class="auth-form">
     @Html.AntiForgeryToken()
     <div class="form-group">
-        <label for="credential-select">Quick Login (Testing)</label>
-        <select id="credential-select" onchange="fillCredentials()">
-            <option value="">Select test credentials...</option>
-            <option value="admin">Admin User (admin@example.com)</option>
-            <option value="user">Regular User (user@example.com)</option>
-            <option value="custom">Custom (manual entry)</option>
-        </select>
-    </div>
-
-    <div class="form-group">
-        <label asp-for="Email">Email</label>
-        <input asp-for="Email" id="email-input" type="email" autocomplete="username" placeholder="m@example.com" />
+        <label asp-for="Email">Email address</label>
+        <input asp-for="Email" id="email-input" type="email" autocomplete="username" placeholder="you@example.com" />
         <span asp-validation-for="Email" class="text-danger"></span>
     </div>
 
     <div class="form-group">
-        <label for="Password">Password</label>
-        <div class="password-group">
-            <input name="Password" id="password-input" type="password" autocomplete="current-password" />
-            <div class="forgot-password">
-                <a href="#">Forgot your password?</a>
-            </div>
+        <div class="field-row">
+            <label asp-for="Password">Password</label>
+            <a class="field-link" href="#" onclick="return false;">Forgot password?</a>
+        </div>
+        <div class="input-with-action">
+            <input asp-for="Password" id="password-input" type="password" autocomplete="current-password" />
+            <button type="button" class="input-action" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
+                Show
+            </button>
         </div>
         <span asp-validation-for="Password" class="text-danger"></span>
     </div>
@@ -45,9 +41,26 @@
         <input name="ReturnUrl" type="hidden" value="@Model.ReturnUrl" />
     }
     
-    <button type="submit" class="btn-primary">Login</button>
+    <button type="submit" class="btn-primary">Sign in</button>
 </form>
 
-<div class="auth-footer">
-    <p>Don't have an account? <a href="@Url.Action("Register", "Account")">Sign up</a></p>
+<div class="auth-divider">
+    <span>Testing helper</span>
+</div>
+
+<div class="testing-helper">
+    <div class="testing-helper-copy">
+        <h2>Quick login</h2>
+        <p>Pick one of the seeded users to pre-fill the form without typing credentials manually.</p>
+    </div>
+
+    <div class="form-group compact">
+        <label for="credential-select">User</label>
+        <select id="credential-select" onchange="fillCredentials()">
+            <option value="">Select test credentials...</option>
+            <option value="admin">Admin User (admin@example.com)</option>
+            <option value="user">Regular User (user@example.com)</option>
+            <option value="custom">Custom (manual entry)</option>
+        </select>
+    </div>
 </div>

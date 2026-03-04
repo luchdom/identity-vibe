@@ -7,9 +7,23 @@
     <link rel="stylesheet" href="~/css/auth.css" asp-append-version="true" />
 }
 
-<div class="auth-container">
-    <div class="auth-wrapper">
-        @RenderBody()
+<div class="auth-shell">
+    <header class="auth-topbar">
+        <a class="auth-brand" href="@Url.Action("Login", "Account")">
+            <span class="auth-brand-mark">IV</span>
+            <span class="auth-brand-copy">
+                <span class="auth-brand-title">Identity Vibe</span>
+                <span class="auth-brand-subtitle">Secure access</span>
+            </span>
+        </a>
+
+        <a class="auth-help-link" href="@Url.Action("Login", "Account")">Need help?</a>
+    </header>
+
+    <div class="auth-container">
+        <div class="auth-wrapper">
+            @RenderBody()
+        </div>
     </div>
 </div>
 

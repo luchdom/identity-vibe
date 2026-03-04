@@ -26,3 +26,14 @@ function fillCredentials() {
             break;
     }
 }
+
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('password-input');
+
+    if (!passwordInput) {
+        return;
+    }
+
+    const isPassword = passwordInput.getAttribute('type') === 'password';
+    passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+}

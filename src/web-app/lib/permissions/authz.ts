@@ -43,6 +43,10 @@ export function canCreateOrder(scopes: readonly string[] | null | undefined): bo
   return hasAnyScope(scopes, ['orders.write', 'orders.manage', 'admin.full']);
 }
 
+export function canViewAllOrders(scopes: readonly string[] | null | undefined): boolean {
+  return hasAnyScope(scopes, ['orders.manage', 'admin.full']);
+}
+
 export function canManageUsers(scopes: readonly string[] | null | undefined): boolean {
   return hasAnyScope(scopes, ['admin.users', 'admin.full']);
 }

@@ -83,6 +83,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isLoading: false,
       });
 
+      // E2E bypass avoids external auth-network dependency while still requiring local auth state.
+      const shouldBypassAuthNetwork = process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === 'true' ||
+        localStorage.getItem('__e2e_bypass_auth') === '1';
+      if (shouldBypassAuthNetwork) {
+        return;
+      }
+
       try {
         const serverUser = await OAuth2Auth.getUserInfo();
         localStorage.setItem('user', JSON.stringify(serverUser));

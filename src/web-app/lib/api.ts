@@ -86,6 +86,10 @@ function attachInterceptors(client: ReturnType<typeof createApiClient>, clientNa
       return response;
     },
     async (error: AxiosError) => {
+      if (isRequestAborted(error)) {
+        return Promise.reject(error);
+      }
+
       const originalRequest = error.config as RetryableRequestConfig | undefined;
       const originalUrl = originalRequest?.url?.toString() ?? '';
 
@@ -121,6 +125,19 @@ function attachInterceptors(client: ReturnType<typeof createApiClient>, clientNa
   );
 }
 
+export function isRequestAborted(error: unknown): boolean {
+  if (axios.isCancel(error)) {
+    return true;
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const maybeError = error as { code?: string; name?: string; message?: string };
+    return maybeError.code === 'ERR_CANCELED' || maybeError.name === 'CanceledError' || maybeError.message === 'canceled';
+  }
+
+  return false;
+}
+
 export const authApi = createApiClient(AUTH_BASE_URL);
 export const ordersApi = createApiClient(ORDERS_BASE_URL);
 
@@ -128,4 +145,3 @@ attachInterceptors(authApi, 'Auth API');
 attachInterceptors(ordersApi, 'Orders API');
 
 export const api = ordersApi;
-

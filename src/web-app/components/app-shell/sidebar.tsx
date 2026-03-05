@@ -1,7 +1,8 @@
 'use client';
 
+import { useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -20,6 +21,7 @@ import { alpha } from '@mui/material/styles';
 import { Icon } from '@iconify/react';
 
 import { primaryNavItems } from './nav-config';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
 
 const drawerWidth = 296;
 
@@ -28,7 +30,19 @@ type SidebarContentProps = {
 };
 
 function SidebarContent({ onNavigate }: SidebarContentProps) {
+  const router = useRouter();
   const pathname = usePathname();
+  const { isNavigating, startNavigation } = useNavigationProgress();
+  const prefetchedRoutesRef = useRef<Set<string>>(new Set());
+
+  const prefetchRoute = useCallback((href: string) => {
+    if (prefetchedRoutesRef.current.has(href)) {
+      return;
+    }
+
+    prefetchedRoutesRef.current.add(href);
+    router.prefetch(href);
+  }, [router]);
 
   return (
     <Stack
@@ -111,7 +125,16 @@ function SidebarContent({ onNavigate }: SidebarContentProps) {
                 <ListItemButton
                   component={Link}
                   href={item.href}
-                  onClick={onNavigate}
+                  onMouseEnter={() => prefetchRoute(item.href)}
+                  onFocus={() => prefetchRoute(item.href)}
+                  onClick={() => {
+                    if (!isActive) {
+                      startNavigation();
+                    }
+
+                    onNavigate?.();
+                  }}
+                  disabled={isNavigating && !isActive}
                   sx={{
                     minHeight: 44,
                     px: 1.5,

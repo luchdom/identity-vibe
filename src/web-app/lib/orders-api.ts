@@ -10,22 +10,26 @@ import type {
 export class OrdersApi {
   private static readonly BASE_PATH = '/orders';
 
-  static async getOrders(params?: OrdersQueryParams): Promise<OrderListResponse> {
+  static async getOrders(params?: OrdersQueryParams, signal?: AbortSignal): Promise<OrderListResponse> {
     const response = await ordersHttp.get<OrderListResponse>(this.BASE_PATH, {
       params,
+      signal,
     });
     return response.data;
   }
 
-  static async getAllOrders(params?: OrdersQueryParams): Promise<OrderListResponse> {
+  static async getAllOrders(params?: OrdersQueryParams, signal?: AbortSignal): Promise<OrderListResponse> {
     const response = await ordersHttp.get<OrderListResponse>(`${this.BASE_PATH}/all`, {
       params,
+      signal,
     });
     return response.data;
   }
 
-  static async getOrderById(id: number): Promise<OrderDetails> {
-    const response = await ordersHttp.get<OrderDetails>(`${this.BASE_PATH}/${id}`);
+  static async getOrderById(id: number, signal?: AbortSignal): Promise<OrderDetails> {
+    const response = await ordersHttp.get<OrderDetails>(`${this.BASE_PATH}/${id}`, {
+      signal,
+    });
     return response.data;
   }
 

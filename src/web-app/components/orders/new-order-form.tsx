@@ -18,6 +18,12 @@ import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 
 import { SurfacePanel } from '@/components/common/surface-panel';
+import {
+  ORDERS_LIST_CACHE_PREFIX,
+  orderDetailCacheKey,
+  ordersStatusCountsCacheKey,
+} from '@/lib/cache/query-keys';
+import { queryCache } from '@/lib/cache/query-cache';
 import { ordersApi } from '@/lib/orders-api';
 import type { CreateOrderRequest } from '@/types/orders';
 
@@ -140,6 +146,10 @@ export function NewOrderForm({ onCancel, onCreated }: NewOrderFormProps) {
 
     try {
       const response = await ordersApi.createOrder(payload);
+      queryCache.invalidatePrefix(ORDERS_LIST_CACHE_PREFIX);
+      queryCache.invalidate(ordersStatusCountsCacheKey('all'));
+      queryCache.invalidate(ordersStatusCountsCacheKey('mine'));
+      queryCache.set(orderDetailCacheKey(response.order.id), response.order);
       onCreated?.(response.order.id);
     } catch (error: unknown) {
       const maybeAxios = error as { response?: { data?: { detail?: string; message?: string } }; message?: string };

@@ -126,6 +126,34 @@ These rules are the project default for `src/web-app` list/admin screens.
 - Use danger styling
 - Require confirmation for irreversible operations
 
+## Loading UX Rules (`src/web-app`)
+
+Apply these rules to every new data page and route transition:
+
+1. Route transitions:
+- trigger immediate navigation feedback (global top progress indicator)
+- prevent repeated route-trigger clicks while transition is pending
+
+2. Data loading contract:
+- separate first-load (`isInitialLoading`) from background refresh (`isRefetching`)
+- keep current content mounted during refetch; avoid blank/swap-to-full-spinner behavior
+
+3. Error handling:
+- use compact inline `Alert` components with a `Retry` action for load errors
+- do not surface cancellation-abort events as user-visible errors
+
+4. Slow-request feedback:
+- show a subtle delayed hint (around 1200ms) such as “taking longer than expected”
+- keep hints non-blocking and consistent with compact UI density
+
+5. Cache and freshness:
+- use lightweight query cache for short-lived list/detail reuse
+- invalidate affected cache keys after mutations (create/update/delete/cancel flows)
+
+6. Rapid interaction safety:
+- cancel superseded in-flight requests on filter/page/tab changes
+- guard against stale response application using request sequencing
+
 ## Environment Variables
 
 Required browser env vars:

@@ -75,9 +75,10 @@ export interface ResetUserPasswordPayload {
 }
 
 export const adminUsersApi = {
-  async listUsers(query: ListUsersQuery = {}): Promise<AdminUserListResponse> {
+  async listUsers(query: ListUsersQuery = {}, signal?: AbortSignal): Promise<AdminUserListResponse> {
     const response = await authApi.get<AdminUserListResponse>('/api/admin/users', {
       params: query,
+      signal,
     });
     return response.data;
   },
@@ -87,8 +88,10 @@ export const adminUsersApi = {
     return response.data;
   },
 
-  async getAvailableRoles(): Promise<AdminRoleOption[]> {
-    const response = await authApi.get<AdminRoleOption[]>('/api/admin/users/available-roles');
+  async getAvailableRoles(signal?: AbortSignal): Promise<AdminRoleOption[]> {
+    const response = await authApi.get<AdminRoleOption[]>('/api/admin/users/available-roles', {
+      signal,
+    });
     return response.data;
   },
 

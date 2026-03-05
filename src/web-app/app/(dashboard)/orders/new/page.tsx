@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import Button from '@mui/material/Button';
@@ -9,9 +10,23 @@ import Typography from '@mui/material/Typography';
 import { AppShell } from '@/components/app-shell';
 import { AuthGuard } from '@/components/auth';
 import { NewOrderForm } from '@/components/orders';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
 
 export default function NewOrderPage() {
   const router = useRouter();
+  const { startNavigation } = useNavigationProgress();
+  const [isRoutePending, startRouteTransition] = useTransition();
+
+  const navigateTo = useCallback((targetUrl: string) => {
+    if (isRoutePending) {
+      return;
+    }
+
+    startNavigation();
+    startRouteTransition(() => {
+      router.push(targetUrl);
+    });
+  }, [isRoutePending, router, startNavigation]);
 
   return (
     <AuthGuard requiredScopes={['orders.write', 'orders.manage', 'admin.full']}>
@@ -30,7 +45,8 @@ export default function NewOrderPage() {
             <Button
               size="small"
               variant="outlined"
-              onClick={() => router.push('/orders')}
+              onClick={() => navigateTo('/orders')}
+              disabled={isRoutePending}
               sx={{ height: 36, borderRadius: 1, px: 1.5 }}
             >
               Back to orders
@@ -38,8 +54,8 @@ export default function NewOrderPage() {
           </Stack>
 
           <NewOrderForm
-            onCancel={() => router.push('/orders')}
-            onCreated={() => router.push('/orders?created=1')}
+            onCancel={() => navigateTo('/orders')}
+            onCreated={() => navigateTo('/orders?created=1')}
           />
         </Stack>
       </AppShell>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 
 import { Icon } from '@iconify/react';
@@ -13,6 +13,7 @@ import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
+import LinearProgress from '@mui/material/LinearProgress';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import OutlinedInput from '@mui/material/OutlinedInput';
@@ -51,6 +52,14 @@ import {
   type AdminUserListResponse,
   type AdminUserSummary,
 } from '@/lib/admin-users-api';
+import { isRequestAborted } from '@/lib/api';
+import {
+  USERS_AVAILABLE_ROLES_CACHE_KEY,
+  USERS_LIST_CACHE_PREFIX,
+  usersListCacheKey,
+} from '@/lib/cache/query-keys';
+import { queryCache } from '@/lib/cache/query-cache';
+import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 
 type StatusFilter = 'all' | 'active' | 'inactive';
 type SortDirection = 'asc' | 'desc';
@@ -131,6 +140,10 @@ function compareUsers(
 
 export default function UsersPage() {
   const { user } = useAuth();
+  const usersAbortRef = useRef<AbortController | null>(null);
+  const usersRequestIdRef = useRef(0);
+  const rolesAbortRef = useRef<AbortController | null>(null);
+  const rolesRequestIdRef = useRef(0);
 
   const currentUserId = useMemo(() => {
     const candidate = user as { id?: string; sub?: string } | null;
@@ -141,6 +154,8 @@ export default function UsersPage() {
   const [availableRoles, setAvailableRoles] = useState<AdminRoleOption[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [isLoadingRoles, setIsLoadingRoles] = useState(true);
+  const [usersLoadError, setUsersLoadError] = useState<string | null>(null);
+  const [rolesLoadError, setRolesLoadError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -174,20 +189,63 @@ export default function UsersPage() {
   }, []);
 
   const loadRoles = useCallback(async () => {
+    const requestId = ++rolesRequestIdRef.current;
+    rolesAbortRef.current?.abort();
+    const controller = new AbortController();
+    rolesAbortRef.current = controller;
+
     setIsLoadingRoles(true);
+    setRolesLoadError(null);
+
+    const cachedRoles = queryCache.get<AdminRoleOption[]>(USERS_AVAILABLE_ROLES_CACHE_KEY);
+    if (cachedRoles) {
+      setAvailableRoles(cachedRoles);
+    }
 
     try {
-      const roles = await adminUsersApi.getAvailableRoles();
+      const roles = await adminUsersApi.getAvailableRoles(controller.signal);
+      if (requestId !== rolesRequestIdRef.current) {
+        return;
+      }
+
       setAvailableRoles(roles);
+      queryCache.set(USERS_AVAILABLE_ROLES_CACHE_KEY, roles);
     } catch (error) {
-      showFeedback('error', getErrorMessage(error, 'Failed to load available roles'));
+      if (isRequestAborted(error) || requestId !== rolesRequestIdRef.current) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'Failed to load available roles');
+      setRolesLoadError(message);
+      showFeedback('error', message);
     } finally {
-      setIsLoadingRoles(false);
+      if (requestId === rolesRequestIdRef.current) {
+        setIsLoadingRoles(false);
+      }
     }
   }, [showFeedback]);
 
   const loadUsers = useCallback(async () => {
+    const requestId = ++usersRequestIdRef.current;
+    usersAbortRef.current?.abort();
+    const controller = new AbortController();
+    usersAbortRef.current = controller;
+
+    const listKey = usersListCacheKey({
+      search: search || undefined,
+      isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
+      role: roleFilter || undefined,
+      pageNumber,
+      pageSize: rowsPerPage,
+    });
+    const cachedResponse = queryCache.get<AdminUserListResponse>(listKey);
+
+    if (cachedResponse) {
+      setUsersResponse(cachedResponse);
+    }
+
     setIsLoadingUsers(true);
+    setUsersLoadError(null);
 
     try {
       const response = await adminUsersApi.listUsers({
@@ -196,13 +254,25 @@ export default function UsersPage() {
         role: roleFilter || undefined,
         pageNumber,
         pageSize: rowsPerPage,
-      });
+      }, controller.signal);
+      if (requestId !== usersRequestIdRef.current) {
+        return;
+      }
 
       setUsersResponse(response);
+      queryCache.set(listKey, response);
     } catch (error) {
-      showFeedback('error', getErrorMessage(error, 'Failed to load users'));
+      if (isRequestAborted(error) || requestId !== usersRequestIdRef.current) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'Failed to load users');
+      setUsersLoadError(message);
+      showFeedback('error', message);
     } finally {
-      setIsLoadingUsers(false);
+      if (requestId === usersRequestIdRef.current) {
+        setIsLoadingUsers(false);
+      }
     }
   }, [pageNumber, roleFilter, rowsPerPage, search, showFeedback, statusFilter]);
 
@@ -229,6 +299,11 @@ export default function UsersPage() {
     void loadUsers();
   }, [loadUsers]);
 
+  useEffect(() => () => {
+    usersAbortRef.current?.abort();
+    rolesAbortRef.current?.abort();
+  }, []);
+
   const sortedUsers = useMemo(() => {
     const users = [...(usersResponse?.users ?? [])];
     users.sort((left, right) => compareUsers(left, right, sortKey, sortDirection));
@@ -243,6 +318,9 @@ export default function UsersPage() {
   const totalUsers = usersResponse?.totalCount ?? 0;
   const activeUsersOnPage = usersResponse?.users.filter((entry) => entry.isActive).length ?? 0;
   const inactiveUsersOnPage = usersResponse?.users.filter((entry) => !entry.isActive).length ?? 0;
+  const isInitialLoadingUsers = isLoadingUsers && !usersResponse;
+  const isRefetchingUsers = isLoadingUsers && Boolean(usersResponse);
+  const showSlowUsersHint = useDelayedFlag(isLoadingUsers, 1200);
 
   const handleApplyFilters = () => {
     setPageNumber(1);
@@ -266,6 +344,7 @@ export default function UsersPage() {
   }) => {
     try {
       await adminUsersApi.createUser(payload);
+      queryCache.invalidatePrefix(USERS_LIST_CACHE_PREFIX);
       showFeedback('success', 'User created');
       await loadUsers();
     } catch (error) {
@@ -308,6 +387,7 @@ export default function UsersPage() {
 
     try {
       const updated = await adminUsersApi.updateUser(selectedUser.id, payload);
+      queryCache.invalidatePrefix(USERS_LIST_CACHE_PREFIX);
       setSelectedUser(updated);
       showFeedback('success', 'User updated');
       await loadUsers();
@@ -324,6 +404,7 @@ export default function UsersPage() {
 
     try {
       const updated = await adminUsersApi.updateUserRoles(selectedUser.id, { roleNames });
+      queryCache.invalidatePrefix(USERS_LIST_CACHE_PREFIX);
       setSelectedUser(updated);
       showFeedback('success', 'User roles updated');
       await loadUsers();
@@ -340,6 +421,7 @@ export default function UsersPage() {
 
     try {
       const updated = await adminUsersApi.resetUserPassword(selectedUser.id, { newPassword });
+      queryCache.invalidatePrefix(USERS_LIST_CACHE_PREFIX);
       setSelectedUser(updated);
       showFeedback('success', 'Password reset completed');
       await loadUsers();
@@ -359,6 +441,7 @@ export default function UsersPage() {
 
     try {
       await adminUsersApi.updateUserStatus(userId, { isActive: nextActive });
+      queryCache.invalidatePrefix(USERS_LIST_CACHE_PREFIX);
       showFeedback('success', nextActive ? 'User enabled' : 'User disabled');
       await loadUsers();
 
@@ -522,7 +605,7 @@ export default function UsersPage() {
                     setRoleFilter(event.target.value);
                     setPageNumber(1);
                   }}
-                  disabled={isLoadingRoles}
+                  disabled={isLoadingRoles && availableRoles.length === 0}
                   sx={toolbarFieldSx}
                   inputProps={{ 'data-testid': 'users-role-filter' }}
                   SelectProps={{
@@ -555,6 +638,15 @@ export default function UsersPage() {
                     <CircularProgress size={16} />
                     <Typography variant="caption" color="text.secondary">
                       Loading selected user...
+                    </Typography>
+                  </Stack>
+                ) : null}
+
+                {isRefetchingUsers ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={16} />
+                    <Typography variant="caption" color="text.secondary">
+                      {showSlowUsersHint ? 'Still loading users...' : 'Updating list...'}
                     </Typography>
                   </Stack>
                 ) : null}
@@ -614,7 +706,41 @@ export default function UsersPage() {
               </Stack>
             </Stack>
 
-            {isLoadingUsers ? (
+            {usersLoadError ? (
+              <Box sx={{ px: 2.5, pb: 1.5 }}>
+                <Alert
+                  severity="error"
+                  variant="outlined"
+                  action={(
+                    <Button color="inherit" size="small" onClick={() => void loadUsers()}>
+                      Retry
+                    </Button>
+                  )}
+                >
+                  {usersLoadError}
+                </Alert>
+              </Box>
+            ) : null}
+
+            {rolesLoadError ? (
+              <Box sx={{ px: 2.5, pb: 1.5 }}>
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  action={(
+                    <Button color="inherit" size="small" onClick={() => void loadRoles()}>
+                      Retry
+                    </Button>
+                  )}
+                >
+                  {rolesLoadError}
+                </Alert>
+              </Box>
+            ) : null}
+
+            {isRefetchingUsers ? <LinearProgress sx={{ mx: 2.5, mb: 0.5 }} /> : null}
+
+            {isInitialLoadingUsers ? (
               <Stack
                 spacing={1.5}
                 alignItems="center"
@@ -623,6 +749,11 @@ export default function UsersPage() {
               >
                 <CircularProgress size={28} />
                 <Typography color="text.secondary">Loading users...</Typography>
+                {showSlowUsersHint ? (
+                  <Typography variant="caption" color="text.secondary">
+                    This is taking longer than expected.
+                  </Typography>
+                ) : null}
               </Stack>
             ) : sortedUsers.length > 0 ? (
               <>

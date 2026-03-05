@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Breadcrumbs from '@mui/material/Breadcrumbs';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
+import LinearProgress from '@mui/material/LinearProgress';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Switch from '@mui/material/Switch';
@@ -23,6 +24,16 @@ import {
   type AdminRoleSummary,
   type AvailableScope,
 } from '@/lib/admin-roles-api';
+import { isRequestAborted } from '@/lib/api';
+import {
+  ROLE_DETAIL_CACHE_PREFIX,
+  ROLES_AVAILABLE_SCOPES_CACHE_KEY,
+  ROLES_LIST_CACHE_PREFIX,
+  roleDetailCacheKey,
+  rolesListCacheKey,
+} from '@/lib/cache/query-keys';
+import { queryCache } from '@/lib/cache/query-cache';
+import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 
 type FeedbackState = {
   open: boolean;
@@ -40,12 +51,18 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function RolesPermissionsPage() {
+  const listAbortRef = useRef<AbortController | null>(null);
+  const listRequestIdRef = useRef(0);
+  const detailAbortRef = useRef<AbortController | null>(null);
+  const detailRequestIdRef = useRef(0);
   const [roles, setRoles] = useState<AdminRoleSummary[]>([]);
   const [availableScopes, setAvailableScopes] = useState<AvailableScope[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AdminRoleDetail | null>(null);
   const [search, setSearch] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefetching, setIsRefetching] = useState(false);
+  const [listLoadError, setListLoadError] = useState<string | null>(null);
   const [isRefreshingRole, setIsRefreshingRole] = useState(false);
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [isSavingScopes, setIsSavingScopes] = useState(false);
@@ -57,6 +74,9 @@ export default function RolesPermissionsPage() {
     severity: 'success',
     message: '',
   });
+  const hasInitializedRef = useRef(false);
+  const showSlowRolesListHint = useDelayedFlag(isInitialLoading || isRefetching, 1200);
+  const showSlowRoleDetailHint = useDelayedFlag(isRefreshingRole, 1200);
 
   const showFeedback = useCallback((severity: FeedbackState['severity'], message: string) => {
     setFeedback({
@@ -86,29 +106,82 @@ export default function RolesPermissionsPage() {
   }, []);
 
   const loadRoleDetail = useCallback(async (roleId: string) => {
+    const requestId = ++detailRequestIdRef.current;
+    detailAbortRef.current?.abort();
+    const controller = new AbortController();
+    detailAbortRef.current = controller;
+
+    const detailKey = roleDetailCacheKey(roleId);
+    const cachedRole = queryCache.get<AdminRoleDetail>(detailKey);
+    if (cachedRole) {
+      syncRoleDrafts(cachedRole);
+    }
+
     setIsRefreshingRole(true);
     try {
-      const role = await adminRolesApi.getRole(roleId);
+      const role = await adminRolesApi.getRole(roleId, controller.signal);
+      if (requestId !== detailRequestIdRef.current) {
+        return null;
+      }
+
       syncRoleDrafts(role);
+      queryCache.set(detailKey, role);
       return role;
     } catch (error) {
+      if (isRequestAborted(error) || requestId !== detailRequestIdRef.current) {
+        return null;
+      }
+
       showFeedback('error', getErrorMessage(error, 'Failed to load role details'));
       return null;
     } finally {
-      setIsRefreshingRole(false);
+      if (requestId === detailRequestIdRef.current) {
+        setIsRefreshingRole(false);
+      }
     }
   }, [showFeedback, syncRoleDrafts]);
 
   const loadInitialData = useCallback(async (preferredRoleId?: string) => {
-    setIsLoading(true);
+    const requestId = ++listRequestIdRef.current;
+    listAbortRef.current?.abort();
+    const controller = new AbortController();
+    listAbortRef.current = controller;
+
+    const isFirstLoad = !hasInitializedRef.current;
+
+    if (isFirstLoad) {
+      setIsInitialLoading(true);
+    } else {
+      setIsRefetching(true);
+    }
+
+    setListLoadError(null);
+
+    const listCacheKey = rolesListCacheKey();
+    const cachedRoles = queryCache.get<AdminRoleSummary[]>(listCacheKey);
+    const cachedScopes = queryCache.get<AvailableScope[]>(ROLES_AVAILABLE_SCOPES_CACHE_KEY);
+
+    if (cachedRoles) {
+      setRoles(cachedRoles);
+    }
+
+    if (cachedScopes) {
+      setAvailableScopes(cachedScopes);
+    }
+
     try {
       const [rolesResponse, scopesResponse] = await Promise.all([
-        adminRolesApi.listRoles(),
-        adminRolesApi.getAvailableScopes(),
+        adminRolesApi.listRoles(controller.signal),
+        adminRolesApi.getAvailableScopes(controller.signal),
       ]);
+      if (requestId !== listRequestIdRef.current) {
+        return;
+      }
 
       setRoles(rolesResponse);
       setAvailableScopes(scopesResponse);
+      queryCache.set(listCacheKey, rolesResponse);
+      queryCache.set(ROLES_AVAILABLE_SCOPES_CACHE_KEY, scopesResponse);
 
       const nextRoleId = preferredRoleId || rolesResponse[0]?.id || null;
       setSelectedRoleId(nextRoleId);
@@ -119,15 +192,30 @@ export default function RolesPermissionsPage() {
         syncRoleDrafts(null);
       }
     } catch (error) {
-      showFeedback('error', getErrorMessage(error, 'Failed to load roles and scopes'));
+      if (isRequestAborted(error) || requestId !== listRequestIdRef.current) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'Failed to load roles and scopes');
+      setListLoadError(message);
+      showFeedback('error', message);
     } finally {
-      setIsLoading(false);
+      if (requestId === listRequestIdRef.current) {
+        hasInitializedRef.current = true;
+        setIsInitialLoading(false);
+        setIsRefetching(false);
+      }
     }
   }, [loadRoleDetail, showFeedback, syncRoleDrafts]);
 
   useEffect(() => {
     void loadInitialData();
   }, [loadInitialData]);
+
+  useEffect(() => () => {
+    listAbortRef.current?.abort();
+    detailAbortRef.current?.abort();
+  }, []);
 
   const handleSelectRole = async (roleId: string) => {
     setSelectedRoleId(roleId);
@@ -157,6 +245,10 @@ export default function RolesPermissionsPage() {
         description: descriptionDraft.trim() || undefined,
         isActive: isActiveDraft,
       });
+
+      queryCache.invalidatePrefix(ROLES_LIST_CACHE_PREFIX);
+      queryCache.invalidatePrefix(ROLE_DETAIL_CACHE_PREFIX);
+      queryCache.set(roleDetailCacheKey(updated.id), updated);
 
       syncRoleDrafts(updated);
       setRoles((current) => current.map((role) =>
@@ -189,6 +281,10 @@ export default function RolesPermissionsPage() {
       const updated = await adminRolesApi.updateRoleScopes(selectedRoleId, {
         scopeNames: selectedScopesDraft,
       });
+
+      queryCache.invalidatePrefix(ROLES_LIST_CACHE_PREFIX);
+      queryCache.invalidatePrefix(ROLE_DETAIL_CACHE_PREFIX);
+      queryCache.set(roleDetailCacheKey(updated.id), updated);
 
       syncRoleDrafts(updated);
       setRoles((current) => current.map((role) =>
@@ -260,12 +356,15 @@ export default function RolesPermissionsPage() {
                 size="small"
                 variant="outlined"
                 onClick={() => void loadInitialData(selectedRoleId ?? undefined)}
+                disabled={isInitialLoading || isRefetching}
                 sx={{ height: 36, borderRadius: 1, px: 1.5 }}
               >
-                Refresh
+                {isRefetching ? 'Refreshing...' : 'Refresh'}
               </Button>
               <CreateRoleDialog
                 onCreated={async (roleId) => {
+                  queryCache.invalidatePrefix(ROLES_LIST_CACHE_PREFIX);
+                  queryCache.invalidatePrefix(ROLE_DETAIL_CACHE_PREFIX);
                   await loadInitialData(roleId);
                   showFeedback('success', 'Role created');
                 }}
@@ -273,12 +372,37 @@ export default function RolesPermissionsPage() {
             </Stack>
           </Stack>
 
+          {listLoadError ? (
+            <Alert
+              severity="error"
+              variant="outlined"
+              action={(
+                <Button size="small" color="inherit" onClick={() => void loadInitialData(selectedRoleId ?? undefined)}>
+                  Retry
+                </Button>
+              )}
+            >
+              {listLoadError}
+            </Alert>
+          ) : null}
+
+          {isRefetching ? (
+            <Stack spacing={0.75}>
+              <LinearProgress />
+              {showSlowRolesListHint ? (
+                <Typography variant="caption" color="text.secondary">
+                  Refresh is taking longer than expected.
+                </Typography>
+              ) : null}
+            </Stack>
+          ) : null}
+
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 12, lg: 4 }}>
               <RolesList
                 roles={filteredRoles}
                 selectedRoleId={selectedRoleId}
-                isLoading={isLoading}
+                isLoading={isInitialLoading}
                 onSelectRole={(roleId) => {
                   void handleSelectRole(roleId);
                 }}
@@ -305,7 +429,7 @@ export default function RolesPermissionsPage() {
                         <Stack direction="row" spacing={1} alignItems="center">
                           <CircularProgress size={16} />
                           <Typography variant="caption" color="text.secondary">
-                            Refreshing role...
+                            {showSlowRoleDetailHint ? 'Still loading role details...' : 'Refreshing role...'}
                           </Typography>
                         </Stack>
                       ) : null}
@@ -313,7 +437,7 @@ export default function RolesPermissionsPage() {
 
                     {!selectedRole ? (
                       <Typography variant="body2" color="text.secondary">
-                        {isLoading ? 'Loading role data...' : 'Select a role to edit.'}
+                        {isInitialLoading ? 'Loading role data...' : 'Select a role to edit.'}
                       </Typography>
                     ) : (
                       <Stack spacing={2}>

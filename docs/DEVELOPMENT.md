@@ -73,7 +73,27 @@ Use this checklist before implementing or reviewing a new list/admin screen.
 - verify clarity/usability of labels and actions
 - if a requirement is ambiguous or materially affects usability, ask the prompter for clarification before finalizing implementation
 
+7. Loading UX baseline:
+- every route transition must show immediate progress feedback
+- data pages must distinguish first-load vs refetch and keep content mounted during refetch
+- list/detail loads should provide inline retry alerts on failure
+- superseded requests must be cancelable and stale responses must not override latest state
+- show subtle delayed long-load hints (about 1200ms) for slow requests
+
 See `docs/FRONTEND.md` for the full locked UI system rules.
+
+## Frontend E2E (web-app)
+
+Run Playwright loading UX checks:
+
+```bash
+cd src/web-app
+npm run test:e2e
+```
+
+Notes:
+- E2E config runs `web-app` on an isolated local port (`3101`).
+- E2E mode uses `NEXT_PUBLIC_E2E_BYPASS_AUTH=true` and a local test auth flag to avoid external auth dependency during loading UX tests.
 
 ## Auth + Orders Smoke Test
 

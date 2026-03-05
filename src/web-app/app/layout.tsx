@@ -5,6 +5,7 @@ import { Roboto } from "next/font/google";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 
 import { AuthProvider } from "@/contexts/auth-context";
+import { NavigationProgressProvider } from "@/contexts/navigation-progress-context";
 import { ThemeModeProvider } from "@/theme";
 
 import "./globals.css";
@@ -31,7 +32,11 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body>
         <AppRouterCacheProvider options={{ key: "mui" }}>
           <ThemeModeProvider fontFamily="var(--font-roboto)">
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              <NavigationProgressProvider>
+                {children}
+              </NavigationProgressProvider>
+            </AuthProvider>
           </ThemeModeProvider>
         </AppRouterCacheProvider>
       </body>

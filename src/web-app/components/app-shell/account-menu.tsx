@@ -17,6 +17,7 @@ import { Icon } from '@iconify/react';
 
 import { ThemeToggleButton } from './theme-toggle-button';
 import { useAuth } from '@/contexts/auth-context';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
 
 type AccountMenuProps = {
   userName?: string;
@@ -28,6 +29,7 @@ export function AccountMenu({
   userEmail = 'web-app@local.test',
 }: AccountMenuProps) {
   const { user, logout } = useAuth();
+  const { isNavigating, startNavigation } = useNavigationProgress();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const isOpen = Boolean(anchorEl);
@@ -87,7 +89,11 @@ export function AccountMenu({
         <MenuItem
           component={Link}
           href="/profile"
-          onClick={() => setAnchorEl(null)}
+          onClick={() => {
+            startNavigation();
+            setAnchorEl(null);
+          }}
+          disabled={isNavigating}
         >
           <ListItemIcon>
             <Icon icon="solar:user-id-bold-duotone" width={20} />
@@ -112,8 +118,10 @@ export function AccountMenu({
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
+            startNavigation();
             void logout();
           }}
+          disabled={isNavigating}
         >
           <ListItemIcon>
             <Icon icon="solar:logout-3-bold-duotone" width={20} />

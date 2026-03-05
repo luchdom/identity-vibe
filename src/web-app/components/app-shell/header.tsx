@@ -11,6 +11,8 @@ import { Icon } from '@iconify/react';
 
 import { AccountMenu } from './account-menu';
 import { ThemeToggleButton } from './theme-toggle-button';
+import { NavigationProgressBar } from '@/components/common/navigation-progress-bar';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
 
 type AppHeaderProps = {
   title: string;
@@ -19,11 +21,14 @@ type AppHeaderProps = {
 };
 
 export function AppHeader({ title, subtitle, onOpenMobileNav }: AppHeaderProps) {
+  const { isNavigating } = useNavigationProgress();
+
   return (
     <Paper
       component="header"
       elevation={0}
       sx={{
+        position: 'relative',
         px: { xs: 2, sm: 3, lg: 4 },
         py: 2,
         borderBottom: '1px solid',
@@ -87,6 +92,8 @@ export function AppHeader({ title, subtitle, onOpenMobileNav }: AppHeaderProps) 
           <AccountMenu />
         </Stack>
       </Stack>
+
+      <NavigationProgressBar visible={isNavigating} />
     </Paper>
   );
 }

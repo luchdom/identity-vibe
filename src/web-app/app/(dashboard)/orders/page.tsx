@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import { Icon } from '@iconify/react';
@@ -9,6 +9,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
@@ -31,6 +32,16 @@ import { EmptyStateCard } from '@/components/common/empty-state-card';
 import { SurfacePanel } from '@/components/common/surface-panel';
 import { OrderStatusLabel } from '@/components/orders';
 import { useAuth } from '@/contexts/auth-context';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
+import {
+  ORDERS_LIST_CACHE_PREFIX,
+  orderDetailCacheKey,
+  ordersListCacheKey,
+  ordersStatusCountsCacheKey,
+} from '@/lib/cache/query-keys';
+import { queryCache } from '@/lib/cache/query-cache';
+import { isRequestAborted } from '@/lib/api';
+import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 import { ordersApi } from '@/lib/orders-api';
 import { canCreateOrder, canViewAllOrders } from '@/lib/permissions/authz';
 import { OrderStatus, type OrderListResponse } from '@/types/orders';
@@ -82,14 +93,23 @@ function parsePositiveInt(value: string | null, fallback: number) {
 }
 
 export default function OrdersPage() {
+  const ordersAbortRef = useRef<AbortController | null>(null);
+  const ordersRequestIdRef = useRef(0);
+  const countsAbortRef = useRef<AbortController | null>(null);
+  const countsRequestIdRef = useRef(0);
+  const prefetchedRoutesRef = useRef<Set<string>>(new Set());
+  const hoverPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { scopes } = useAuth();
+  const { startNavigation } = useNavigationProgress();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const [isRoutePending, startRouteTransition] = useTransition();
 
   const [data, setData] = useState<OrderListResponse | null>(null);
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({
     open: false,
     severity: 'success',
@@ -107,6 +127,10 @@ export default function OrdersPage() {
 
   const canCreate = canCreateOrder(scopes);
   const canViewAll = canViewAllOrders(scopes);
+  const orderScope: 'all' | 'mine' = canViewAll ? 'all' : 'mine';
+  const isInitialLoading = isLoading && !data;
+  const isRefetching = isLoading && Boolean(data);
+  const showSlowOrdersHint = useDelayedFlag(isLoading, 1200);
 
   const selectedOrder = useMemo(
     () => data?.orders.find((entry) => entry.id === actionMenu.orderId) ?? null,
@@ -122,42 +146,140 @@ export default function OrdersPage() {
   }, []);
 
   const updateQueryParams = useCallback((mutate: (params: URLSearchParams) => void) => {
+    if (isRoutePending) {
+      return;
+    }
+
     const nextParams = new URLSearchParams(searchParams.toString());
     mutate(nextParams);
     const nextQuery = nextParams.toString();
-    router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname);
-  }, [pathname, router, searchParams]);
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+    const currentQuery = searchParams.toString();
+    const currentUrl = currentQuery ? `${pathname}?${currentQuery}` : pathname;
+
+    if (nextUrl === currentUrl) {
+      return;
+    }
+
+    startNavigation();
+    startRouteTransition(() => {
+      router.push(nextUrl);
+    });
+  }, [isRoutePending, pathname, router, searchParams, startNavigation]);
+
+  const navigateTo = useCallback((targetUrl: string) => {
+    if (isRoutePending) {
+      return;
+    }
+
+    startNavigation();
+    startRouteTransition(() => {
+      router.push(targetUrl);
+    });
+  }, [isRoutePending, router, startNavigation]);
+
+  const prefetchRoute = useCallback((targetUrl: string) => {
+    if (prefetchedRoutesRef.current.has(targetUrl)) {
+      return;
+    }
+
+    prefetchedRoutesRef.current.add(targetUrl);
+    router.prefetch(targetUrl);
+  }, [router]);
+
+  const scheduleOrderDetailPrefetch = useCallback((orderId: number) => {
+    if (hoverPrefetchTimeoutRef.current) {
+      clearTimeout(hoverPrefetchTimeoutRef.current);
+    }
+
+    hoverPrefetchTimeoutRef.current = setTimeout(() => {
+      prefetchRoute(`/orders/${orderId}`);
+      hoverPrefetchTimeoutRef.current = null;
+    }, 140);
+  }, [prefetchRoute]);
 
   const loadOrders = useCallback(async () => {
+    const requestId = ++ordersRequestIdRef.current;
+    ordersAbortRef.current?.abort();
+    const controller = new AbortController();
+    ordersAbortRef.current = controller;
+
+    const listKey = ordersListCacheKey({
+      scope: orderScope,
+      status: selectedStatus,
+      page,
+      pageSize: rowsPerPage,
+    });
+    const cached = queryCache.get<OrderListResponse>(listKey);
+    if (cached) {
+      setData(cached);
+    }
+
     setIsLoading(true);
+    setLoadError(null);
     try {
       const response = canViewAll
-        ? await ordersApi.getAllOrders({ page, pageSize: rowsPerPage, status: selectedStatus })
-        : await ordersApi.getOrders({ page, pageSize: rowsPerPage, status: selectedStatus });
+        ? await ordersApi.getAllOrders({ page, pageSize: rowsPerPage, status: selectedStatus }, controller.signal)
+        : await ordersApi.getOrders({ page, pageSize: rowsPerPage, status: selectedStatus }, controller.signal);
+      if (requestId !== ordersRequestIdRef.current) {
+        return;
+      }
+
       setData(response);
+      queryCache.set(listKey, response);
     } catch (error) {
-      showFeedback('error', getErrorMessage(error, 'Failed to load orders'));
+      if (isRequestAborted(error) || requestId !== ordersRequestIdRef.current) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'Failed to load orders');
+      setLoadError(message);
+      showFeedback('error', message);
     } finally {
-      setIsLoading(false);
+      if (requestId === ordersRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [canViewAll, page, rowsPerPage, selectedStatus, showFeedback]);
+  }, [canViewAll, orderScope, page, rowsPerPage, selectedStatus, showFeedback]);
 
   const loadStatusCounts = useCallback(async () => {
+    const requestId = ++countsRequestIdRef.current;
+    countsAbortRef.current?.abort();
+    const controller = new AbortController();
+    countsAbortRef.current = controller;
+
+    const countsKey = ordersStatusCountsCacheKey(orderScope);
+    const cachedCounts = queryCache.get<Record<string, number>>(countsKey);
+    if (cachedCounts) {
+      setStatusCounts(cachedCounts);
+    }
+
     try {
       const results = await Promise.all(
         STATUS_FILTERS.map(async (filter) => {
           const response = canViewAll
-            ? await ordersApi.getAllOrders({ page: 1, pageSize: 1, status: filter.value })
-            : await ordersApi.getOrders({ page: 1, pageSize: 1, status: filter.value });
+            ? await ordersApi.getAllOrders({ page: 1, pageSize: 1, status: filter.value }, controller.signal)
+            : await ordersApi.getOrders({ page: 1, pageSize: 1, status: filter.value }, controller.signal);
           return [filter.label, response.totalCount] as const;
         })
       );
+      if (requestId !== countsRequestIdRef.current) {
+        return;
+      }
 
-      setStatusCounts(Object.fromEntries(results));
-    } catch {
-      setStatusCounts({});
+      const nextCounts = Object.fromEntries(results);
+      setStatusCounts(nextCounts);
+      queryCache.set(countsKey, nextCounts);
+    } catch (error) {
+      if (isRequestAborted(error) || requestId !== countsRequestIdRef.current) {
+        return;
+      }
+
+      if (!cachedCounts) {
+        setStatusCounts({});
+      }
     }
-  }, [canViewAll]);
+  }, [canViewAll, orderScope]);
 
   useEffect(() => {
     void loadOrders();
@@ -166,6 +288,15 @@ export default function OrdersPage() {
   useEffect(() => {
     void loadStatusCounts();
   }, [loadStatusCounts]);
+
+  useEffect(() => () => {
+    ordersAbortRef.current?.abort();
+    countsAbortRef.current?.abort();
+
+    if (hoverPrefetchTimeoutRef.current) {
+      clearTimeout(hoverPrefetchTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (searchParams.get('created') !== '1') {
@@ -196,7 +327,11 @@ export default function OrdersPage() {
     }
 
     try {
-      await ordersApi.cancelOrder(orderId, 'Cancelled by admin');
+      const response = await ordersApi.cancelOrder(orderId, 'Cancelled by admin');
+      queryCache.invalidatePrefix(ORDERS_LIST_CACHE_PREFIX);
+      queryCache.invalidate(ordersStatusCountsCacheKey(orderScope));
+      queryCache.invalidate(orderDetailCacheKey(orderId));
+      queryCache.set(orderDetailCacheKey(orderId), response.order);
       showFeedback('success', 'Order cancelled');
       await loadOrders();
       await loadStatusCounts();
@@ -227,7 +362,10 @@ export default function OrdersPage() {
                 variant="contained"
                 color="inherit"
                 startIcon={<Icon icon="mingcute:add-line" width={16} />}
-                onClick={() => router.push('/orders/new')}
+                onMouseEnter={() => prefetchRoute('/orders/new')}
+                onFocus={() => prefetchRoute('/orders/new')}
+                onClick={() => navigateTo('/orders/new')}
+                disabled={isRoutePending}
                 data-testid="new-order-button"
                 sx={{ height: 36, borderRadius: 1, px: 1.5 }}
               >
@@ -253,9 +391,10 @@ export default function OrdersPage() {
               size="small"
               variant="outlined"
               onClick={() => void loadOrders()}
+              disabled={isLoading}
               sx={{ height: 36, borderRadius: 1, px: 1.5 }}
             >
-              Refresh
+              {isRefetching ? 'Refreshing...' : 'Refresh'}
             </Button>
           </Stack>
         </Stack>
@@ -297,105 +436,160 @@ export default function OrdersPage() {
             ))}
           </Tabs>
 
-          {isLoading ? (
+          {loadError ? (
+            <Box sx={{ px: 2.5, pb: 1 }}>
+              <Alert
+                severity="error"
+                variant="outlined"
+                action={(
+                  <Button size="small" color="inherit" onClick={() => void loadOrders()}>
+                    Retry
+                  </Button>
+                )}
+              >
+                {loadError}
+              </Alert>
+            </Box>
+          ) : null}
+
+          {isRefetching ? (
+            <Stack spacing={0.75} sx={{ mx: 2.5, mb: 0.5 }}>
+              <LinearProgress />
+              {showSlowOrdersHint ? (
+                <Typography variant="caption" color="text.secondary">
+                  Updating orders is taking longer than expected.
+                </Typography>
+              ) : null}
+            </Stack>
+          ) : null}
+
+          {isInitialLoading ? (
             <Stack spacing={1.5} alignItems="center" justifyContent="center" sx={{ py: 8 }}>
               <CircularProgress size={28} />
               <Typography color="text.secondary">Loading orders...</Typography>
+              {showSlowOrdersHint ? (
+                <Typography variant="caption" color="text.secondary">
+                  This is taking longer than expected.
+                </Typography>
+              ) : null}
             </Stack>
-          ) : data && data.orders.length > 0 ? (
+          ) : data ? (
             <>
-              <TableContainer>
-                <Table sx={{ minWidth: 980 }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Order</TableCell>
-                      <TableCell>Customer</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Total</TableCell>
-                      <TableCell align="right">Items</TableCell>
-                      <TableCell>Created</TableCell>
-                      <TableCell align="right" />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {data.orders.map((order) => (
-                      <TableRow key={order.id} hover>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={700}>
-                            #{order.orderNumber}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Stack spacing={0.25}>
-                            <Typography variant="body2" fontWeight={600}>
-                              {order.customerName}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {order.customerEmail}
-                            </Typography>
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          <OrderStatusLabel status={order.status} statusDisplay={order.statusDisplay} />
-                        </TableCell>
-                        <TableCell align="right">{formatMoney(order.totalAmount, order.currency)}</TableCell>
-                        <TableCell align="right">{order.itemCount}</TableCell>
-                        <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell align="right">
-                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                            <IconButton
-                              size="small"
-                              aria-label={`Open order ${order.orderNumber}`}
-                              onClick={() => router.push(`/orders/${order.id}`)}
-                            >
-                              <Icon icon="solar:eye-bold" width={18} />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              aria-label={`Open actions for order ${order.orderNumber}`}
-                              onClick={(event) => {
-                                setActionMenu({
-                                  anchorEl: event.currentTarget,
-                                  orderId: order.id,
-                                });
-                              }}
-                            >
-                              <Icon icon="eva:more-vertical-fill" width={18} />
-                            </IconButton>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              {data.orders.length > 0 ? (
+                <>
+                  <TableContainer>
+                    <Table sx={{ minWidth: 980 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Order</TableCell>
+                          <TableCell>Customer</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell align="right">Total</TableCell>
+                          <TableCell align="right">Items</TableCell>
+                          <TableCell>Created</TableCell>
+                          <TableCell align="right" />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {data.orders.map((order) => (
+                          <TableRow
+                            key={order.id}
+                            hover
+                            onMouseEnter={() => scheduleOrderDetailPrefetch(order.id)}
+                            onMouseLeave={() => {
+                              if (hoverPrefetchTimeoutRef.current) {
+                                clearTimeout(hoverPrefetchTimeoutRef.current);
+                                hoverPrefetchTimeoutRef.current = null;
+                              }
+                            }}
+                          >
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={700}>
+                                #{order.orderNumber}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Stack spacing={0.25}>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {order.customerName}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {order.customerEmail}
+                                </Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell>
+                              <OrderStatusLabel status={order.status} statusDisplay={order.statusDisplay} />
+                            </TableCell>
+                            <TableCell align="right">{formatMoney(order.totalAmount, order.currency)}</TableCell>
+                            <TableCell align="right">{order.itemCount}</TableCell>
+                            <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Open order ${order.orderNumber}`}
+                                  onMouseEnter={() => prefetchRoute(`/orders/${order.id}`)}
+                                  onFocus={() => prefetchRoute(`/orders/${order.id}`)}
+                                  onClick={() => navigateTo(`/orders/${order.id}`)}
+                                  disabled={isRoutePending}
+                                >
+                                  <Icon icon="solar:eye-bold" width={18} />
+                                </IconButton>
+                                <IconButton
+                                  size="small"
+                                  aria-label={`Open actions for order ${order.orderNumber}`}
+                                  onClick={(event) => {
+                                    setActionMenu({
+                                      anchorEl: event.currentTarget,
+                                      orderId: order.id,
+                                    });
+                                  }}
+                                >
+                                  <Icon icon="eva:more-vertical-fill" width={18} />
+                                </IconButton>
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
 
-              <TablePagination
-                component="div"
-                count={data.totalCount}
-                page={Math.max(data.pageNumber - 1, 0)}
-                rowsPerPage={rowsPerPage}
-                rowsPerPageOptions={[5, 10, 20]}
-                onPageChange={(_, nextPage) => {
-                  updateQueryParams((params) => {
-                    params.set('page', String(nextPage + 1));
-                  });
-                }}
-                onRowsPerPageChange={(event) => {
-                  updateQueryParams((params) => {
-                    params.set('pageSize', event.target.value);
-                    params.set('page', '1');
-                  });
-                }}
-              />
+                  <TablePagination
+                    component="div"
+                    count={data.totalCount}
+                    page={Math.max(data.pageNumber - 1, 0)}
+                    rowsPerPage={rowsPerPage}
+                    rowsPerPageOptions={[5, 10, 20]}
+                    onPageChange={(_, nextPage) => {
+                      updateQueryParams((params) => {
+                        params.set('page', String(nextPage + 1));
+                      });
+                    }}
+                    onRowsPerPageChange={(event) => {
+                      updateQueryParams((params) => {
+                        params.set('pageSize', event.target.value);
+                        params.set('page', '1');
+                      });
+                    }}
+                  />
+                </>
+              ) : (
+                <Box sx={{ p: 2.5 }}>
+                  <EmptyStateCard
+                    eyebrow="No data"
+                    title="No orders found"
+                    description="Adjust the status filter or create a new order."
+                  />
+                </Box>
+              )}
             </>
           ) : (
             <Box sx={{ p: 2.5 }}>
-              <EmptyStateCard
-                eyebrow="No data"
-                title="No orders found"
-                description="Adjust the status filter or create a new order."
-              />
+              <Alert severity="error" variant="outlined">
+                Orders data is unavailable. Retry to load.
+              </Alert>
             </Box>
           )}
         </SurfacePanel>
@@ -419,10 +613,11 @@ export default function OrdersPage() {
         }}
       >
         <MenuItem
+          disabled={!selectedOrder || isRoutePending}
           onClick={() => {
             if (selectedOrder) {
               setActionMenu({ anchorEl: null, orderId: null });
-              router.push(`/orders/${selectedOrder.id}`);
+              navigateTo(`/orders/${selectedOrder.id}`);
             }
           }}
         >

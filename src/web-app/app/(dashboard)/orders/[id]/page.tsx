@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 import Alert from '@mui/material/Alert';
@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
+import LinearProgress from '@mui/material/LinearProgress';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -17,8 +18,17 @@ import { AppLabel } from '@/components/common/app-label';
 import { SurfacePanel } from '@/components/common/surface-panel';
 import { OrderStatusLabel } from '@/components/orders';
 import { useAuth } from '@/contexts/auth-context';
+import { useNavigationProgress } from '@/contexts/navigation-progress-context';
+import {
+  ORDERS_LIST_CACHE_PREFIX,
+  orderDetailCacheKey,
+  ordersStatusCountsCacheKey,
+} from '@/lib/cache/query-keys';
+import { queryCache } from '@/lib/cache/query-cache';
+import { isRequestAborted } from '@/lib/api';
+import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 import { ordersApi } from '@/lib/orders-api';
-import { canCreateOrder } from '@/lib/permissions/authz';
+import { canCreateOrder, canViewAllOrders } from '@/lib/permissions/authz';
 import type { OrderDetails } from '@/types/orders';
 
 type FeedbackState = {
@@ -45,12 +55,17 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export default function OrderDetailPage() {
+  const orderAbortRef = useRef<AbortController | null>(null);
+  const orderRequestIdRef = useRef(0);
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const { scopes } = useAuth();
+  const { startNavigation } = useNavigationProgress();
+  const [isRoutePending, startRouteTransition] = useTransition();
 
   const [order, setOrder] = useState<OrderDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({
     open: false,
     severity: 'success',
@@ -59,26 +74,55 @@ export default function OrderDetailPage() {
 
   const orderId = Number(params.id);
   const canCancelOrders = canCreateOrder(scopes);
+  const orderScope: 'all' | 'mine' = canViewAllOrders(scopes) ? 'all' : 'mine';
+  const isInitialLoading = isLoading && !order;
+  const isRefetching = isLoading && Boolean(order);
+  const showSlowOrderDetailHint = useDelayedFlag(isLoading, 1200);
 
   const loadOrder = useCallback(async () => {
+    const requestId = ++orderRequestIdRef.current;
+    orderAbortRef.current?.abort();
+    const controller = new AbortController();
+    orderAbortRef.current = controller;
+
+    const detailKey = orderDetailCacheKey(orderId);
+    const cachedOrder = queryCache.get<OrderDetails>(detailKey);
+    if (cachedOrder) {
+      setOrder(cachedOrder);
+    }
+
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const response = await ordersApi.getOrderById(orderId);
+      const response = await ordersApi.getOrderById(orderId, controller.signal);
+      if (requestId !== orderRequestIdRef.current) {
+        return;
+      }
+
       setOrder(response);
+      queryCache.set(detailKey, response);
     } catch (error) {
+      if (isRequestAborted(error) || requestId !== orderRequestIdRef.current) {
+        return;
+      }
+
+      const message = getErrorMessage(error, 'Failed to load order details');
+      setLoadError(message);
       setFeedback({
         open: true,
         severity: 'error',
-        message: getErrorMessage(error, 'Failed to load order details'),
+        message,
       });
-      setOrder(null);
     } finally {
-      setIsLoading(false);
+      if (requestId === orderRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [orderId]);
 
   useEffect(() => {
     if (!Number.isFinite(orderId)) {
+      setLoadError('Invalid order id');
       setFeedback({
         open: true,
         severity: 'error',
@@ -91,6 +135,10 @@ export default function OrderDetailPage() {
     void loadOrder();
   }, [loadOrder, orderId]);
 
+  useEffect(() => () => {
+    orderAbortRef.current?.abort();
+  }, []);
+
   const handleCancelOrder = async () => {
     if (!order) {
       return;
@@ -102,7 +150,11 @@ export default function OrderDetailPage() {
     }
 
     try {
-      await ordersApi.cancelOrder(order.id, 'Cancelled by admin');
+      const response = await ordersApi.cancelOrder(order.id, 'Cancelled by admin');
+      queryCache.invalidatePrefix(ORDERS_LIST_CACHE_PREFIX);
+      queryCache.invalidate(ordersStatusCountsCacheKey(orderScope));
+      queryCache.invalidate(orderDetailCacheKey(order.id));
+      queryCache.set(orderDetailCacheKey(order.id), response.order);
       setFeedback({
         open: true,
         severity: 'success',
@@ -118,18 +170,59 @@ export default function OrderDetailPage() {
     }
   };
 
+  const navigateTo = useCallback((targetUrl: string) => {
+    if (isRoutePending) {
+      return;
+    }
+
+    startNavigation();
+    startRouteTransition(() => {
+      router.push(targetUrl);
+    });
+  }, [isRoutePending, router, startNavigation]);
+
   return (
     <AppShell
       title={order ? `Order #${order.orderNumber}` : 'Order details'}
       subtitle="Order summary, customer data, and status history."
     >
-      {isLoading ? (
+      {isInitialLoading ? (
         <Stack spacing={1.5} alignItems="center" justifyContent="center" sx={{ py: 10 }}>
           <CircularProgress size={28} />
           <Typography color="text.secondary">Loading order...</Typography>
+          {showSlowOrderDetailHint ? (
+            <Typography variant="caption" color="text.secondary">
+              This is taking longer than expected.
+            </Typography>
+          ) : null}
         </Stack>
       ) : order ? (
         <Stack spacing={2.5}>
+          {loadError ? (
+            <Alert
+              severity="error"
+              variant="outlined"
+              action={(
+                <Button size="small" color="inherit" onClick={() => void loadOrder()}>
+                  Retry
+                </Button>
+              )}
+            >
+              {loadError}
+            </Alert>
+          ) : null}
+
+          {isRefetching ? (
+            <Stack spacing={0.75}>
+              <LinearProgress />
+              {showSlowOrderDetailHint ? (
+                <Typography variant="caption" color="text.secondary">
+                  Refresh is taking longer than expected.
+                </Typography>
+              ) : null}
+            </Stack>
+          ) : null}
+
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             justifyContent="space-between"
@@ -159,7 +252,8 @@ export default function OrderDetailPage() {
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => router.push('/orders')}
+                onClick={() => navigateTo('/orders')}
+                disabled={isRoutePending}
                 sx={{ height: 36, borderRadius: 1, px: 1.5 }}
               >
                 Back
@@ -317,9 +411,14 @@ export default function OrderDetailPage() {
           </Box>
         </Stack>
       ) : (
-        <Alert severity="error" variant="outlined">
-          Unable to load order.
-        </Alert>
+        <Stack spacing={1.5} alignItems="flex-start">
+          <Alert severity="error" variant="outlined">
+            {loadError || 'Unable to load order.'}
+          </Alert>
+          <Button size="small" variant="outlined" onClick={() => void loadOrder()}>
+            Retry
+          </Button>
+        </Stack>
       )}
 
       <Snackbar

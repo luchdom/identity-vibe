@@ -43,18 +43,24 @@ export interface UpdateRoleScopesPayload {
 }
 
 export const adminRolesApi = {
-  async listRoles(): Promise<AdminRoleSummary[]> {
-    const response = await authApi.get<AdminRoleSummary[]>('/api/admin/roles');
+  async listRoles(signal?: AbortSignal): Promise<AdminRoleSummary[]> {
+    const response = await authApi.get<AdminRoleSummary[]>('/api/admin/roles', {
+      signal,
+    });
     return response.data;
   },
 
-  async getRole(roleId: string): Promise<AdminRoleDetail> {
-    const response = await authApi.get<AdminRoleDetail>(`/api/admin/roles/${roleId}`);
+  async getRole(roleId: string, signal?: AbortSignal): Promise<AdminRoleDetail> {
+    const response = await authApi.get<AdminRoleDetail>(`/api/admin/roles/${roleId}`, {
+      signal,
+    });
     return response.data;
   },
 
-  async getAvailableScopes(): Promise<AvailableScope[]> {
-    const response = await authApi.get<AvailableScope[]>('/api/admin/roles/available-scopes');
+  async getAvailableScopes(signal?: AbortSignal): Promise<AvailableScope[]> {
+    const response = await authApi.get<AvailableScope[]>('/api/admin/roles/available-scopes', {
+      signal,
+    });
     return response.data;
   },
 
@@ -73,4 +79,3 @@ export const adminRolesApi = {
     return response.data;
   },
 };
-

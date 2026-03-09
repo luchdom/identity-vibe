@@ -56,11 +56,14 @@ Use this checklist before implementing or reviewing a new list/admin screen.
 
 3. Page composition:
 - compact header (title + breadcrumb + right action)
-- status tabs with thin indicator + soft count badges
+- use either:
+  - status tabs with thin indicator + soft count badges when counts materially help scanning
+  - a compact toolbar status dropdown/select when status behaves like a normal list filter
 - compact table rows with sortable headers and rows-per-page
 
 4. Actions and feedback:
 - row actions: quick edit + 3-dot overflow
+- overflow-only row actions are acceptable when no quick-edit flow exists yet
 - destructive actions in overflow menus with confirmation when irreversible
 - status/role badges should be soft labels
 
@@ -177,6 +180,9 @@ builder.Services.AddOptions<ClientConfiguration>()
 - Sidebar navigation uses a single Orders entry; status filters are in the `/orders` page UI.
 - Orders feature routes (`/orders`, `/orders/new`, `/orders/{id}`) should all highlight the Orders menu item.
 - Creating a new order uses `/orders/new` and redirects back to `/orders` with a success toast.
+- Orders list status uses a toolbar dropdown/select, not status tabs with counts.
+- Orders list keeps manual `Refresh` in the table-adjacent toolbar, not the page header.
+- Orders list rows currently use overflow-only actions (`3 dots`) with `View details` inside the menu.
 
 ## Orders Sample JSON Seeding
 

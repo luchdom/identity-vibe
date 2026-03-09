@@ -18,6 +18,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 
 import { Icon } from '@iconify/react';
 
@@ -97,9 +98,9 @@ export default function DashboardPage() {
           }}
         >
           <DashboardCard
-            sx={{
-              background: 'linear-gradient(135deg, rgba(32, 101, 209, 0.14), rgba(0, 167, 111, 0.06))',
-            }}
+            sx={(theme) => ({
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.16)}, rgba(0, 167, 111, 0.06))`,
+            })}
           >
             <Box
               sx={{

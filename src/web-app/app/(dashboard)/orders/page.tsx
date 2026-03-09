@@ -14,7 +14,6 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -22,12 +21,11 @@ import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TablePagination from '@mui/material/TablePagination';
 import TableRow from '@mui/material/TableRow';
-import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import { AppShell } from '@/components/app-shell';
-import { AppLabel } from '@/components/common/app-label';
 import { EmptyStateCard } from '@/components/common/empty-state-card';
 import { SurfacePanel } from '@/components/common/surface-panel';
 import { OrderStatusLabel } from '@/components/orders';
@@ -37,7 +35,6 @@ import {
   ORDERS_LIST_CACHE_PREFIX,
   orderDetailCacheKey,
   ordersListCacheKey,
-  ordersStatusCountsCacheKey,
 } from '@/lib/cache/query-keys';
 import { queryCache } from '@/lib/cache/query-cache';
 import { isRequestAborted } from '@/lib/api';
@@ -57,8 +54,9 @@ type ActionMenuState = {
   orderId: number | null;
 };
 
-const STATUS_FILTERS: Array<{ label: string; value?: OrderStatus }> = [
-  { label: 'All', value: undefined },
+const STATUS_FILTERS: Array<{ label: string; value: OrderStatus | null }> = [
+  { label: 'All statuses', value: null },
+  { label: 'Draft', value: OrderStatus.Draft },
   { label: 'Confirmed', value: OrderStatus.Confirmed },
   { label: 'Processing', value: OrderStatus.Processing },
   { label: 'Shipped', value: OrderStatus.Shipped },
@@ -95,8 +93,6 @@ function parsePositiveInt(value: string | null, fallback: number) {
 export default function OrdersPage() {
   const ordersAbortRef = useRef<AbortController | null>(null);
   const ordersRequestIdRef = useRef(0);
-  const countsAbortRef = useRef<AbortController | null>(null);
-  const countsRequestIdRef = useRef(0);
   const prefetchedRoutesRef = useRef<Set<string>>(new Set());
   const hoverPrefetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { scopes } = useAuth();
@@ -107,7 +103,6 @@ export default function OrdersPage() {
   const [isRoutePending, startRouteTransition] = useTransition();
 
   const [data, setData] = useState<OrderListResponse | null>(null);
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState>({
@@ -131,6 +126,7 @@ export default function OrdersPage() {
   const isInitialLoading = isLoading && !data;
   const isRefetching = isLoading && Boolean(data);
   const showSlowOrdersHint = useDelayedFlag(isLoading, 1200);
+  const hasActiveFilters = selectedStatus !== undefined;
 
   const selectedOrder = useMemo(
     () => data?.orders.find((entry) => entry.id === actionMenu.orderId) ?? null,
@@ -242,56 +238,12 @@ export default function OrdersPage() {
     }
   }, [canViewAll, orderScope, page, rowsPerPage, selectedStatus, showFeedback]);
 
-  const loadStatusCounts = useCallback(async () => {
-    const requestId = ++countsRequestIdRef.current;
-    countsAbortRef.current?.abort();
-    const controller = new AbortController();
-    countsAbortRef.current = controller;
-
-    const countsKey = ordersStatusCountsCacheKey(orderScope);
-    const cachedCounts = queryCache.get<Record<string, number>>(countsKey);
-    if (cachedCounts) {
-      setStatusCounts(cachedCounts);
-    }
-
-    try {
-      const results = await Promise.all(
-        STATUS_FILTERS.map(async (filter) => {
-          const response = canViewAll
-            ? await ordersApi.getAllOrders({ page: 1, pageSize: 1, status: filter.value }, controller.signal)
-            : await ordersApi.getOrders({ page: 1, pageSize: 1, status: filter.value }, controller.signal);
-          return [filter.label, response.totalCount] as const;
-        })
-      );
-      if (requestId !== countsRequestIdRef.current) {
-        return;
-      }
-
-      const nextCounts = Object.fromEntries(results);
-      setStatusCounts(nextCounts);
-      queryCache.set(countsKey, nextCounts);
-    } catch (error) {
-      if (isRequestAborted(error) || requestId !== countsRequestIdRef.current) {
-        return;
-      }
-
-      if (!cachedCounts) {
-        setStatusCounts({});
-      }
-    }
-  }, [canViewAll, orderScope]);
-
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
 
-  useEffect(() => {
-    void loadStatusCounts();
-  }, [loadStatusCounts]);
-
   useEffect(() => () => {
     ordersAbortRef.current?.abort();
-    countsAbortRef.current?.abort();
 
     if (hoverPrefetchTimeoutRef.current) {
       clearTimeout(hoverPrefetchTimeoutRef.current);
@@ -320,6 +272,13 @@ export default function OrdersPage() {
     });
   };
 
+  const handleClearFilters = () => {
+    updateQueryParams((params) => {
+      params.delete('status');
+      params.set('page', '1');
+    });
+  };
+
   const handleCancelOrder = async (orderId: number) => {
     const confirmed = window.confirm('Cancel this order?');
     if (!confirmed) {
@@ -329,12 +288,10 @@ export default function OrdersPage() {
     try {
       const response = await ordersApi.cancelOrder(orderId, 'Cancelled by admin');
       queryCache.invalidatePrefix(ORDERS_LIST_CACHE_PREFIX);
-      queryCache.invalidate(ordersStatusCountsCacheKey(orderScope));
       queryCache.invalidate(orderDetailCacheKey(orderId));
       queryCache.set(orderDetailCacheKey(orderId), response.order);
       showFeedback('success', 'Order cancelled');
       await loadOrders();
-      await loadStatusCounts();
     } catch (error) {
       showFeedback('error', getErrorMessage(error, 'Failed to cancel order'));
     }
@@ -387,54 +344,94 @@ export default function OrdersPage() {
                 </span>
               </Tooltip>
             )}
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => void loadOrders()}
-              disabled={isLoading}
-              sx={{ height: 36, borderRadius: 1, px: 1.5 }}
-            >
-              {isRefetching ? 'Refreshing...' : 'Refresh'}
-            </Button>
           </Stack>
         </Stack>
 
         <SurfacePanel>
-          <Tabs
-            value={selectedStatus ?? 'all'}
-            onChange={(_, value: OrderStatus | 'all') => {
-              if (value === 'all') {
-                handleStatusFilterChange(undefined);
-              } else {
-                handleStatusFilterChange(value);
-              }
-            }}
-            sx={{
-              px: 2.5,
-              pt: 1,
-              minHeight: 56,
-              '& .MuiTab-root': {
-                minHeight: 48,
-                textTransform: 'none',
-                fontWeight: 600,
-                alignItems: 'center',
-                gap: 1,
-              },
-            }}
+          <Stack
+            direction={{ xs: 'column', lg: 'row' }}
+            spacing={2}
+            justifyContent="space-between"
+            alignItems={{ xs: 'stretch', lg: 'center' }}
+            sx={{ p: 2.5 }}
+            data-testid="orders-table-toolbar"
           >
-            {STATUS_FILTERS.map((filter) => (
-              <Tab
-                key={filter.label}
-                value={filter.value ?? 'all'}
-                label={(
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <span>{filter.label}</span>
-                    <AppLabel>{statusCounts[filter.label] ?? 0}</AppLabel>
-                  </Stack>
-                )}
-              />
-            ))}
-          </Tabs>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+              <TextField
+                select
+                size="small"
+                value={selectedStatus ?? ''}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  handleStatusFilterChange(nextValue === '' ? undefined : Number(nextValue) as OrderStatus);
+                }}
+                sx={{
+                  minWidth: 200,
+                  '& .MuiOutlinedInput-root': {
+                    height: 36,
+                    borderRadius: 1,
+                    fontSize: 14,
+                  },
+                  '& .MuiOutlinedInput-input': {
+                    py: 0,
+                    px: 1.25,
+                    display: 'flex',
+                    alignItems: 'center',
+                  },
+                }}
+                SelectProps={{
+                  displayEmpty: true,
+                  SelectDisplayProps: {
+                    'data-testid': 'orders-status-filter-trigger',
+                  },
+                  renderValue: (selected) => {
+                    if (selected === '') {
+                      return (
+                        <Box component="span" sx={{ color: 'text.secondary' }}>
+                          Status
+                        </Box>
+                      );
+                    }
+
+                    return STATUS_FILTERS.find((filter) => String(filter.value ?? '') === String(selected))?.label ?? 'Status';
+                  },
+                  inputProps: {
+                    'aria-label': 'Filter orders by status',
+                    'data-testid': 'orders-status-filter',
+                  },
+                }}
+              >
+                {STATUS_FILTERS.map((filter) => (
+                  <MenuItem key={filter.label} value={filter.value ?? ''}>
+                    {filter.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleClearFilters}
+                disabled={!hasActiveFilters || isRoutePending}
+                data-testid="orders-clear-filters"
+                sx={{ height: 36, borderRadius: 1, px: 1.5 }}
+              >
+                Clear
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => void loadOrders()}
+                disabled={isLoading}
+                data-testid="orders-refresh-button"
+                sx={{ height: 36, borderRadius: 1, px: 1.5 }}
+              >
+                {isRefetching ? 'Refreshing...' : 'Refresh'}
+              </Button>
+            </Stack>
+          </Stack>
 
           {loadError ? (
             <Box sx={{ px: 2.5, pb: 1 }}>
@@ -453,7 +450,13 @@ export default function OrdersPage() {
           ) : null}
 
           {isRefetching ? (
-            <Stack spacing={0.75} sx={{ mx: 2.5, mb: 0.5 }}>
+            <Stack
+              spacing={0.75}
+              sx={{
+                mx: 2.5,
+                mb: 0.5,
+              }}
+            >
               <LinearProgress />
               {showSlowOrdersHint ? (
                 <Typography variant="caption" color="text.secondary">
@@ -525,30 +528,18 @@ export default function OrdersPage() {
                             <TableCell align="right">{order.itemCount}</TableCell>
                             <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                             <TableCell align="right">
-                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                                <IconButton
-                                  size="small"
-                                  aria-label={`Open order ${order.orderNumber}`}
-                                  onMouseEnter={() => prefetchRoute(`/orders/${order.id}`)}
-                                  onFocus={() => prefetchRoute(`/orders/${order.id}`)}
-                                  onClick={() => navigateTo(`/orders/${order.id}`)}
-                                  disabled={isRoutePending}
-                                >
-                                  <Icon icon="solar:eye-bold" width={18} />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  aria-label={`Open actions for order ${order.orderNumber}`}
-                                  onClick={(event) => {
-                                    setActionMenu({
-                                      anchorEl: event.currentTarget,
-                                      orderId: order.id,
-                                    });
-                                  }}
-                                >
-                                  <Icon icon="eva:more-vertical-fill" width={18} />
-                                </IconButton>
-                              </Stack>
+                              <IconButton
+                                size="small"
+                                aria-label={`Open actions for order ${order.orderNumber}`}
+                                onClick={(event) => {
+                                  setActionMenu({
+                                    anchorEl: event.currentTarget,
+                                    orderId: order.id,
+                                  });
+                                }}
+                              >
+                                <Icon icon="eva:more-vertical-fill" width={18} />
+                              </IconButton>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -578,9 +569,9 @@ export default function OrdersPage() {
               ) : (
                 <Box sx={{ p: 2.5 }}>
                   <EmptyStateCard
-                    eyebrow="No data"
+                    eyebrow="No matches"
                     title="No orders found"
-                    description="Adjust the status filter or create a new order."
+                    description="Adjust the status filter, clear the filter, or create a new order."
                   />
                 </Box>
               )}

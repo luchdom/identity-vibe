@@ -9,13 +9,17 @@ export const TEST_USER = {
 };
 
 export async function fulfillJsonWithCors(route: Route, body: unknown, status = 200) {
+  const requestOrigin = route.request().headers().origin;
+  const allowOrigin = requestOrigin || 'http://localhost:3101';
+
   if (route.request().method() === 'OPTIONS') {
     await route.fulfill({
       status: 204,
       headers: {
-        'access-control-allow-origin': '*',
+        'access-control-allow-origin': allowOrigin,
         'access-control-allow-methods': 'GET,POST,PUT,DELETE,OPTIONS',
         'access-control-allow-headers': '*',
+        'access-control-allow-credentials': 'true',
       },
     });
     return;
@@ -25,7 +29,8 @@ export async function fulfillJsonWithCors(route: Route, body: unknown, status = 
     status,
     contentType: 'application/json',
     headers: {
-      'access-control-allow-origin': '*',
+      'access-control-allow-origin': allowOrigin,
+      'access-control-allow-credentials': 'true',
     },
     body: JSON.stringify(body),
   });

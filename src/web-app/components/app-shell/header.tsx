@@ -20,7 +20,11 @@ type AppHeaderProps = {
   onOpenMobileNav: () => void;
 };
 
-export function AppHeader({ title, subtitle, onOpenMobileNav }: AppHeaderProps) {
+export function AppHeader({
+  title,
+  subtitle,
+  onOpenMobileNav,
+}: AppHeaderProps) {
   const { isNavigating } = useNavigationProgress();
 
   return (

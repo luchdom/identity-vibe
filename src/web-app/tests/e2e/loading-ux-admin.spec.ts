@@ -108,7 +108,7 @@ test.describe('Users loading UX', () => {
     await page.goto('/users');
 
     await expect(page.getByText('Loading users...')).toBeVisible();
-    await expect(page.getByText('alpha@example.com')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'alpha@example.com' })).toBeVisible();
   });
 
   test('keeps current table visible while users refetch', async ({ page }) => {
@@ -145,13 +145,13 @@ test.describe('Users loading UX', () => {
     });
 
     await page.goto('/users');
-    await expect(page.getByText('alpha@example.com')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'alpha@example.com' })).toBeVisible();
 
     await page.getByRole('tab', { name: /Active/i }).click();
 
-    await expect(page.getByText('alpha@example.com')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'alpha@example.com' })).toBeVisible();
     await expect(page.locator('.MuiLinearProgress-root').first()).toBeVisible();
-    await expect(page.getByText('bravo@example.com')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'bravo@example.com' })).toBeVisible();
   });
 });
 
@@ -189,7 +189,7 @@ test.describe('Roles loading UX', () => {
     await page.goto('/users/roles');
 
     await expect(page.getByText('Loading roles...')).toBeVisible();
-    await expect(page.getByText('Operator')).toBeVisible();
+    await expect(page.getByTestId('role-item-Operator')).toBeVisible();
   });
 
   test('keeps current role list visible while refresh is in progress', async ({ page }) => {
@@ -234,13 +234,13 @@ test.describe('Roles loading UX', () => {
     });
 
     await page.goto('/users/roles');
-    await expect(page.getByText('Operator')).toBeVisible();
+    await expect(page.getByTestId('role-item-Operator')).toBeVisible();
 
     await page.getByRole('button', { name: 'Refresh' }).click();
 
-    await expect(page.getByText('Operator')).toBeVisible();
+    await expect(page.getByTestId('role-item-Operator')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Refreshing...' })).toBeVisible();
     await expect(page.locator('.MuiLinearProgress-root').first()).toBeVisible();
-    await expect(page.getByText('Manager')).toBeVisible();
+    await expect(page.getByTestId('role-item-Manager')).toBeVisible();
   });
 });

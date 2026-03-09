@@ -19,7 +19,7 @@ body {
 }
 
 *::selection {
-  background: rgba(32, 101, 209, 0.18);
+  background: rgba(101, 31, 255, 0.18);
 }
 
 a {

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 import Box from '@mui/material/Box';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -12,12 +12,13 @@ type AppLabelProps = {
   children: ReactNode;
   color?: AppLabelColor;
   variant?: AppLabelVariant;
-};
+} & ComponentPropsWithoutRef<'span'>;
 
 export function AppLabel({
   children,
   color = 'default',
   variant = 'soft',
+  ...rest
 }: AppLabelProps) {
   const theme = useTheme();
 
@@ -42,6 +43,7 @@ export function AppLabel({
   return (
     <Box
       component="span"
+      {...rest}
       sx={{
         height: 24,
         minWidth: 24,

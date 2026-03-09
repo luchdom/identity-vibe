@@ -14,9 +14,9 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
     palette: {
       mode,
       primary: {
-        main: '#2065D1',
-        light: '#5B8DEF',
-        dark: '#123A8C',
+        main: '#651FFF',
+        light: '#7C4DFF',
+        dark: '#6200EA',
         contrastText: '#FFFFFF',
       },
       secondary: {
@@ -34,14 +34,19 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
         main: '#FF5630',
       },
       background: {
-        default: isLight ? '#F4F6FB' : '#0B1020',
-        paper: isLight ? '#FFFFFF' : '#111827',
+        default: isLight ? '#F4F6FB' : '#121826',
+        paper: isLight ? '#FFFFFF' : '#182131',
       },
       text: {
         primary: isLight ? '#1C252E' : '#F9FAFB',
-        secondary: isLight ? '#637381' : '#9CA3AF',
+        secondary: isLight ? '#637381' : '#B6C1CD',
       },
-      divider: isLight ? 'rgba(145, 158, 171, 0.20)' : 'rgba(145, 158, 171, 0.16)',
+      divider: isLight ? 'rgba(145, 158, 171, 0.20)' : 'rgba(145, 158, 171, 0.22)',
+      action: {
+        hover: isLight ? 'rgba(145, 158, 171, 0.08)' : 'rgba(145, 158, 171, 0.12)',
+        selected: isLight ? 'rgba(101, 31, 255, 0.10)' : 'rgba(101, 31, 255, 0.18)',
+        focus: isLight ? 'rgba(101, 31, 255, 0.16)' : 'rgba(101, 31, 255, 0.24)',
+      },
     },
     shape: {
       borderRadius: 8,
@@ -105,8 +110,8 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
         styleOverrides: {
           body: {
             backgroundImage: isLight
-              ? 'radial-gradient(circle at top right, rgba(32, 101, 209, 0.08), transparent 28%), radial-gradient(circle at bottom left, rgba(0, 167, 111, 0.05), transparent 24%)'
-              : 'radial-gradient(circle at top right, rgba(32, 101, 209, 0.18), transparent 28%), radial-gradient(circle at bottom left, rgba(0, 167, 111, 0.08), transparent 24%)',
+              ? 'radial-gradient(circle at top right, rgba(101, 31, 255, 0.08), transparent 28%), radial-gradient(circle at bottom left, rgba(0, 167, 111, 0.05), transparent 24%)'
+              : 'radial-gradient(circle at top right, rgba(101, 31, 255, 0.22), transparent 32%), radial-gradient(circle at bottom left, rgba(0, 167, 111, 0.10), transparent 28%)',
           },
         },
       },
@@ -143,10 +148,11 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
           root: {
             borderRadius: 16,
             border: '1px solid',
-            borderColor: isLight ? 'rgba(145, 158, 171, 0.18)' : 'rgba(145, 158, 171, 0.12)',
+            borderColor: isLight ? 'rgba(145, 158, 171, 0.18)' : 'rgba(145, 158, 171, 0.18)',
             boxShadow: isLight
               ? '0 12px 32px rgba(145, 158, 171, 0.16)'
-              : '0 12px 32px rgba(2, 6, 23, 0.34)',
+              : '0 10px 28px rgba(2, 6, 23, 0.22)',
+            backgroundColor: isLight ? '#FFFFFF' : '#182131',
             backgroundImage: 'none',
           },
         },
@@ -194,8 +200,8 @@ function getThemeOptions(mode: PaletteMode, fontFamily: string): ThemeOptions {
           head: {
             fontSize: '0.875rem',
             fontWeight: 600,
-            color: isLight ? '#637381' : '#9CA3AF',
-            backgroundColor: isLight ? '#F4F6F8' : 'rgba(145, 158, 171, 0.08)',
+            color: isLight ? '#637381' : '#B6C1CD',
+            backgroundColor: isLight ? '#F4F6F8' : 'rgba(145, 158, 171, 0.12)',
           },
         },
       },

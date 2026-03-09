@@ -94,10 +94,9 @@ These rules are the project default for `src/web-app` list/admin screens.
 
 ### Tabs and Table Patterns
 
-- Status tabs:
-  - minimal tabs
-  - thin indicator
-  - soft compact count badges
+- Status filters:
+  - use minimal tabs with thin indicator and soft compact count badges when status buckets and counts are a primary part of the page
+  - use a compact toolbar dropdown/select when status should behave like a standard list filter near the table
 - Table defaults:
   - compact rows
   - sortable headers where relevant
@@ -108,6 +107,7 @@ These rules are the project default for `src/web-app` list/admin screens.
 - Default row action pattern:
   - quick edit icon/button
   - 3-dot overflow menu for secondary actions
+- Overflow-only row actions are also acceptable when there is no implemented quick-edit flow for that resource yet
 - Do not use many inline text action buttons in list rows
 
 ### Labels/Badges

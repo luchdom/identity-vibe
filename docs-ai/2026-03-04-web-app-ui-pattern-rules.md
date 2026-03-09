@@ -51,14 +51,16 @@ If a choice is compact vs medium (or similar density choice), default to **compa
 
 ### 5. Status Tabs Pattern
 
-- Minimal tabs with thin indicator
-- Small soft count badge in each tab
+- When status buckets and counts are a primary part of the page, use minimal tabs with thin indicator and small soft count badges.
+- When status behaves like a standard list filter, use a compact toolbar dropdown/select instead.
+- Choose one pattern per page; do not stack tabs and a separate status filter unless there is a strong product reason.
 - Compact spacing and typography
 
 ### 6. Table Pattern
 
 - Default density: compact rows
 - Row actions: quick edit icon + 3-dot overflow menu
+- Overflow-only actions are acceptable when a quick-edit path does not exist yet for that resource.
 - Sorting: enabled where relevant through sortable headers
 - Pagination: include rows-per-page selector for list tables
 
@@ -98,4 +100,3 @@ Before implementing new list pages (`Roles`, `Orders` list refresh), verify thes
 3. Primary list action uses `contained` + `color="inherit"`.
 4. Row action pattern is quick edit + overflow menu.
 5. Badges are soft and compact.
-

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Breadcrumbs from '@mui/material/Breadcrumbs';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
@@ -17,6 +18,7 @@ import Typography from '@mui/material/Typography';
 import { AppShell } from '@/components/app-shell';
 import { CreateRoleDialog, RoleScopeEditor, RolesList } from '@/components/admin/roles';
 import { AuthGuard } from '@/components/auth';
+import { AppLabel } from '@/components/common/app-label';
 import { SurfacePanel } from '@/components/common/surface-panel';
 import {
   adminRolesApi,
@@ -322,6 +324,7 @@ export default function RolesPermissionsPage() {
   const hasScopeChanges = selectedRole
     ? selectedScopesNormalized !== persistedScopesNormalized
     : false;
+  const hasUnsavedChanges = hasMetadataChanges || hasScopeChanges;
 
   return (
     <AuthGuard requiredScopes={['admin.roles', 'admin.full']}>
@@ -397,8 +400,8 @@ export default function RolesPermissionsPage() {
             </Stack>
           ) : null}
 
-          <Grid container spacing={2.5}>
-            <Grid size={{ xs: 12, lg: 4 }}>
+          <Grid container spacing={2.5} alignItems="flex-start">
+            <Grid size={{ xs: 12, md: 4, lg: 3 }}>
               <RolesList
                 roles={filteredRoles}
                 selectedRoleId={selectedRoleId}
@@ -408,11 +411,16 @@ export default function RolesPermissionsPage() {
                 }}
                 search={search}
                 onSearchChange={setSearch}
+                panelSx={{
+                  position: { md: 'sticky' },
+                  top: { md: 24 },
+                  maxHeight: { md: 'calc(100vh - 180px)' },
+                }}
               />
             </Grid>
 
-            <Grid size={{ xs: 12, lg: 8 }}>
-              <Stack spacing={2.5}>
+            <Grid size={{ xs: 12, md: 8, lg: 9 }}>
+              <Stack spacing={2.5} sx={{ minWidth: 0 }}>
                 <SurfacePanel>
                   <Stack spacing={2} sx={{ p: 2.5 }} data-testid="role-details-panel">
                     <Stack
@@ -421,9 +429,16 @@ export default function RolesPermissionsPage() {
                       alignItems={{ xs: 'flex-start', sm: 'center' }}
                       justifyContent="space-between"
                     >
-                      <Typography variant="subtitle1" fontWeight={700}>
-                        Role details
-                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography variant="subtitle1" fontWeight={700}>
+                          Role details
+                        </Typography>
+                        {selectedRole && hasUnsavedChanges ? (
+                          <AppLabel color="warning" data-testid="role-unsaved-indicator">
+                            Unsaved changes
+                          </AppLabel>
+                        ) : null}
+                      </Stack>
 
                       {isRefreshingRole ? (
                         <Stack direction="row" spacing={1} alignItems="center">
@@ -514,36 +529,67 @@ export default function RolesPermissionsPage() {
                   </Stack>
                 </SurfacePanel>
 
-                <RoleScopeEditor
-                  availableScopes={availableScopes}
-                  selectedScopes={selectedScopesDraft}
-                  onToggleScope={handleToggleScope}
-                  onReplaceGroup={handleReplaceGroup}
-                  disabled={!selectedRole || isRefreshingRole || isSavingScopes}
-                />
+                <Box sx={{ minWidth: 0 }}>
+                  <RoleScopeEditor
+                    availableScopes={availableScopes}
+                    selectedScopes={selectedScopesDraft}
+                    onToggleScope={handleToggleScope}
+                    onReplaceGroup={handleReplaceGroup}
+                    disabled={!selectedRole || isRefreshingRole || isSavingScopes}
+                  />
+                </Box>
 
-                <Stack direction="row" spacing={1.25} justifyContent="flex-end">
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={!selectedRole || isRefreshingRole}
-                    onClick={() => selectedRole && syncRoleDrafts(selectedRole)}
-                    sx={{ height: 36, borderRadius: 1, px: 1.5 }}
+                <SurfacePanel
+                  sx={{
+                    position: { md: 'sticky' },
+                    bottom: { md: 16 },
+                    zIndex: 2,
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1.25}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    sx={{ px: 2, py: 1.5 }}
+                    data-testid="role-actions-bar"
                   >
-                    Reset
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="inherit"
-                    disabled={!selectedRole || !hasScopeChanges || isSavingScopes || isRefreshingRole}
-                    onClick={() => void handleSaveScopes()}
-                    data-testid="save-role-scopes-button"
-                    sx={{ height: 36, borderRadius: 1, px: 1.5 }}
-                  >
-                    {isSavingScopes ? 'Saving...' : 'Save permissions'}
-                  </Button>
-                </Stack>
+                    <Stack spacing={0.25}>
+                      <Typography variant="body2" fontWeight={600}>
+                        Permission changes
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {hasUnsavedChanges
+                          ? 'You have unpublished edits for this role.'
+                          : 'All role changes are saved.'}
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1.25}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={!selectedRole || isRefreshingRole || !hasUnsavedChanges}
+                        onClick={() => selectedRole && syncRoleDrafts(selectedRole)}
+                        sx={{ height: 36, borderRadius: 1, px: 1.5 }}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="inherit"
+                        disabled={!selectedRole || !hasScopeChanges || isSavingScopes || isRefreshingRole}
+                        onClick={() => void handleSaveScopes()}
+                        data-testid="save-role-scopes-button"
+                        sx={{ height: 36, borderRadius: 1, px: 1.5 }}
+                      >
+                        {isSavingScopes ? 'Saving...' : 'Save permissions'}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </SurfacePanel>
               </Stack>
             </Grid>
           </Grid>

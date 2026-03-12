@@ -4,7 +4,7 @@
 
 The system is composed of three runtime components in development:
 
-- `web-admin` (Next.js UI)
+- `web-app` (Next.js UI)
 - `AuthServer` (.NET 8, OpenIddict)
 - `Orders` (.NET 8 API)
 
@@ -12,7 +12,7 @@ The browser calls `AuthServer` and `Orders` directly. There is no separate rever
 
 ## Request Flow
 
-1. User opens `web-admin` (`http://localhost:3000`)
+1. User opens `web-app` (`http://localhost:3001` in standalone dev, `http://localhost:3000` in legacy Docker Compose flows)
 2. Frontend initiates OAuth2 Authorization Code + PKCE against `AuthServer`
 3. Frontend exchanges code for tokens on `AuthServer`
 4. Frontend loads user profile from `GET /connect/userinfo`
@@ -76,7 +76,8 @@ When adding a new permission:
 
 - `AuthServer`: `http://localhost:5000`
 - `Orders`: `http://localhost:5003`
-- `web-admin`: `http://localhost:3000`
+- `web-app`: `http://localhost:3001` (standalone dev)
+- Legacy Docker `client`: `http://localhost:3000`
 
 ## Key Files
 
@@ -87,8 +88,8 @@ When adding a new permission:
 - `src/backend/AuthServer/Controllers/AdminUsersController.cs`
 - `src/backend/AuthServer/Data/Entities/AppRoleScope.cs`
 - `src/backend/Orders/Program.cs`
-- `src/web-admin/lib/api.ts`
-- `src/web-admin/lib/admin-roles-api.ts`
-- `src/web-admin/lib/admin-users-api.ts`
-- `src/web-admin/lib/oauth2-auth.ts`
-- `src/web-admin/lib/orders-api.ts`
+- `src/web-app/lib/api.ts`
+- `src/web-app/lib/admin-roles-api.ts`
+- `src/web-app/lib/admin-users-api.ts`
+- `src/web-app/lib/auth/oauth2-auth.ts`
+- `src/web-app/lib/orders-api.ts`

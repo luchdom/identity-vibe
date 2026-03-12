@@ -52,7 +52,7 @@ cd src/backend/Orders && dotnet run
 Frontend:
 
 ```bash
-cd src/web-admin && npm install && npm run dev
+cd src/web-admin && pnpm install && pnpm dev
 ```
 
 ## Frontend Environment (dev)
@@ -112,7 +112,7 @@ Frontend users-management Playwright smoke (requires local `web-admin` dev serve
 
 ```bash
 cd src/web-admin
-npx playwright test tests/users-management-page.spec.ts
+pnpm exec playwright test tests/users-management-page.spec.ts
 ```
 
 ## Docs

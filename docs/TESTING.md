@@ -155,7 +155,8 @@ public async Task HealthEndpoint_ReturnsOk()
 - Use a test-only `IntegrationTest` environment path with ephemeral keys for reliable local/CI runs.
 
 4. Redirect URI mismatch
-- Ensure the test `redirect_uri` matches the seeded `web-admin` client redirect URI.
+- Ensure the test `redirect_uri` matches the seeded client redirect URI for the client under test.
+- Current AuthServer integration tests still use the `web-admin` client fixture.
 
 5. Container startup timing / Docker availability
 - If Docker is not running or startup is slow, Testcontainers initialization will fail before tests execute.
@@ -197,10 +198,9 @@ Notes:
 dotnet test tests/backend/Orders.UnitTests/Orders.UnitTests.csproj -p:OutDir=C:\\temp\\orders-unit-tests\\
 ```
 
-Frontend Playwright smoke (requires local `web-admin` dev server):
+Frontend Playwright smoke (requires local `web-app` dev server):
 
 ```bash
-cd src/web-admin
-npx playwright test tests/roles-permissions-page.spec.ts
-npx playwright test tests/users-management-page.spec.ts
+cd src/web-app
+pnpm test:e2e
 ```

@@ -1,9 +1,9 @@
-# Frontend Integration Notes (`src/web-admin` and `src/web-app`)
+# Frontend Integration Notes (`src/web-app` primary, `src/web-admin` legacy)
 
 ## Active Frontends
 
-- Legacy/admin baseline: `src/web-admin`
-- Migration target and default for new UI work: `src/web-app`
+- Primary frontend for current work: `src/web-app`
+- Legacy/deprecated frontend retained during migration: `src/web-admin`
 
 For all new frontend implementation work, prefer `src/web-app` patterns unless a task explicitly targets `web-admin`.
 
@@ -161,7 +161,7 @@ Required browser env vars:
 ```env
 NEXT_PUBLIC_AUTH_URL=http://localhost:5000
 NEXT_PUBLIC_ORDERS_URL=http://localhost:5003
-NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_APP_BASE_URL=http://localhost:3001
 ```
 
 Notes:

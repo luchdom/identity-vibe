@@ -32,7 +32,8 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 - Browser traffic goes directly from the client app to `AuthServer` and `Orders`.
 - Ensure both APIs allow the client origin via CORS.
-- Ensure `web-admin` redirect URI (`/callback`) is registered for the `web-admin` OAuth client.
+- Ensure the primary frontend redirect URI (`/callback`) is registered for the `web-app` OAuth client.
+- Keep the legacy `web-admin` OAuth client redirect URI only while Docker Compose or other migration paths still depend on it.
 
 ## Health Checks
 
@@ -40,4 +41,3 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 curl http://localhost:5000/health
 curl http://localhost:5003/health
 ```
-

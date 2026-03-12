@@ -4,7 +4,8 @@
 
 - `AuthServer` -> `http://localhost:5000`
 - `Orders` -> `http://localhost:5003`
-- `web-admin` -> `http://localhost:3000`
+- `web-app` -> `http://localhost:3001` (standalone dev)
+- Legacy Docker `client` -> `http://localhost:3000`
 
 ## Docker (recommended)
 
@@ -12,7 +13,7 @@
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build postgres authserver orders client
 ```
 
-Start only database services (for local `dotnet run` + `npm run dev` workflows):
+Start only database services (for local `dotnet run` + `pnpm dev` workflows):
 
 ```bash
 docker compose up -d postgres
@@ -27,17 +28,17 @@ Notes:
 ```bash
 cd src/backend/AuthServer && dotnet run
 cd src/backend/Orders && dotnet run
-cd src/web-admin && npm install && npm run dev
+cd src/web-app && pnpm install && pnpm dev
 ```
 
 ## Frontend Env (dev)
 
-`src/web-admin/.env.local`
+`src/web-app/.env.local`
 
 ```env
 NEXT_PUBLIC_AUTH_URL=http://localhost:5000
 NEXT_PUBLIC_ORDERS_URL=http://localhost:5003
-NEXT_PUBLIC_APP_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_APP_BASE_URL=http://localhost:3001
 ```
 
 ## Frontend UI Rules Quick Checklist (`src/web-app`)
@@ -91,7 +92,7 @@ Run Playwright loading UX checks:
 
 ```bash
 cd src/web-app
-npm run test:e2e
+pnpm test:e2e
 ```
 
 Notes:
@@ -100,7 +101,7 @@ Notes:
 
 ## Auth + Orders Smoke Test
 
-1. Open `http://localhost:3000`
+1. Open `http://localhost:3001` for standalone `web-app` dev, or `http://localhost:3000` if using the legacy Docker `client`
 2. Authenticate via OAuth2 redirect to `AuthServer`
 3. Verify user profile loads via `/connect/userinfo`
 4. Verify orders list loads from `Orders`
@@ -147,7 +148,7 @@ builder.Services.AddOptions<ClientConfiguration>()
 
 ## Roles & Permissions Admin UI
 
-- URL: `http://localhost:3000/users/roles`
+- URL: `http://localhost:3001/users/roles` in standalone `web-app` dev (`http://localhost:3000/users/roles` via the legacy Docker `client`)
 - Required frontend/backend permission scope: `admin.roles` or `admin.full`
 - Backend endpoints (AuthServer):
   - `GET /api/admin/roles`
@@ -159,7 +160,7 @@ builder.Services.AddOptions<ClientConfiguration>()
 
 ## Users Admin UI
 
-- URL: `http://localhost:3000/users`
+- URL: `http://localhost:3001/users` in standalone `web-app` dev (`http://localhost:3000/users` via the legacy Docker `client`)
 - Required frontend/backend permission scope: `admin.users` or `admin.full`
 - Backend endpoints (AuthServer):
   - `GET /api/admin/users`

@@ -4,7 +4,7 @@
 
 - `AuthServer`
 - `Orders`
-- `web-admin` (browser/client-side logging)
+- `web-app` (browser/client-side logging)
 
 ## Backend Logging
 
@@ -22,6 +22,5 @@ Both backend services use:
 
 ## Validation
 
-- Trigger requests from `web-admin`
+- Trigger requests from `web-app`
 - Check `AuthServer` and `Orders` logs for the same correlation ID across related requests
-

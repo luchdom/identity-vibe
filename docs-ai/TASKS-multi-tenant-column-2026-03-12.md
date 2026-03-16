@@ -21,6 +21,8 @@
   - Tenant lifecycle states are modeled as `Pending`, `Active`, `Suspended`, `Archived`.
   - Membership stores exactly one `RoleId`, plus `IsActive` and `IsDefault`.
   - DB constraints prevent duplicate memberships per user+tenant.
+  - `TenantInvite` stores intended tenant/role for brand-new invited emails.
+  - `TenantMembership` does not allow nullable `UserId` and is created only after acceptance or immediate attach for existing users.
 - Test notes:
   - Add migration smoke coverage or integration assertions for uniqueness and required relationships.
 - Dependencies:
@@ -55,14 +57,46 @@
   - `src/backend/Shared/Extensions/HttpContextExtensions.cs`
 - Acceptance criteria:
   - Initial user session issues a token for the default active tenant.
+  - If the default tenant is no longer usable, token issuance/refresh auto-falls back to another active membership; if none remain, it fails cleanly.
   - Token contains only the active tenant context, not all memberships.
+  - Canonical tenant/support claims use flat explicit custom claims:
+    - `tenant_id`
+    - `tenant_slug`
+    - `tenant_role`
+    - `effective_user_id`
+    - `actor_user_id`
+    - `support_mode`
+    - `impersonation_mode`
   - Tenant role and tenant-derived scopes are issued from the active membership role.
+  - Separate global platform scopes and tenant-local scopes are defined and used consistently.
   - `POST` tenant-switch endpoint exchanges into a new tenant-scoped token set.
+  - Every context switch returns a fresh access token and fresh refresh token bound to that exact context.
   - Suspended tenants and inactive memberships cannot receive new tenant-scoped tokens.
 - Test notes:
   - Add AuthServer integration tests for default-tenant issuance, switch, inactive membership, and suspended tenant failures.
 - Dependencies:
   - Depends on Tasks 1 and 2.
+
+### Task 3A. Migrate scope catalog, client scopes, and policy guards to the new scope families
+- Goal:
+  - Replace the current global admin-scope assumptions with an explicit platform-scope family and tenant-scope family.
+- Files or modules likely touched:
+  - `src/backend/AuthServer/appsettings.Scopes.json`
+  - `src/backend/AuthServer/appsettings.Clients.json`
+  - `src/backend/AuthServer/Program.cs`
+  - `src/backend/Orders/appsettings*.json`
+  - `src/backend/Shared/Authorization/Extensions/AuthorizationExtensions.cs`
+  - `src/web-app/components/auth/auth-guard.tsx`
+  - `src/web-app/lib/permissions/authz.ts`
+- Acceptance criteria:
+  - Platform APIs use global platform scopes only.
+  - Tenant-context APIs use tenant-local scopes only.
+  - Existing `admin.users`, `admin.roles`, and `admin.full` references are migrated, deprecated, or removed intentionally.
+  - Frontend guards and backend policies align to the new scope model.
+- Test notes:
+  - Extend integration and e2e tests to verify route/API enforcement after the scope migration.
+- Dependencies:
+  - Depends on Tasks 2 and 3.
 
 ### Task 4. Add AuthServer identity, platform, and tenant-context APIs
 - Goal:
@@ -77,6 +111,8 @@
   - Separate platform-admin tenant discovery/list APIs exist.
   - Self-serve tenant creation exists and provisions an active tenant with creator as `TenantAdmin`.
   - Tenant-context membership APIs support list, invite/create, role change, deactivate, and remove.
+  - Existing global users invited to another tenant are attached immediately.
+  - Brand-new invited emails create `TenantInvite` records without creating memberships yet.
   - Tenant-admin operations do not expose global identity field mutation.
   - Last-active-tenant-admin guardrail is enforced.
 - Test notes:
@@ -98,6 +134,7 @@
   - Impersonation requires a reason.
   - Direct-mode token grants full tenant access and carries actor/support metadata.
   - Impersonation token represents the effective user and actor metadata.
+  - Direct mode and impersonation each return fresh context-bound token pairs.
   - All support-mode actions are audit logged.
 - Test notes:
   - Add integration tests for direct mode, impersonation, required-reason validation, and audit record creation.
@@ -119,7 +156,8 @@
   - `Orders`, `Customers`, and `IdempotencyRecords` have `TenantId`.
   - Customer email uniqueness is per tenant.
   - Order number uniqueness is per tenant.
-  - Idempotency uniqueness includes tenant context.
+  - Idempotency uniqueness is enforced via `TenantId + IdempotencyKey`.
+  - `Order.UserId` is retained intentionally as audit metadata.
 - Test notes:
   - Add DB/integration assertions covering per-tenant uniqueness and migration behavior.
 - Dependencies:
@@ -137,6 +175,7 @@
   - All order queries are filtered by active tenant.
   - Tenant members can see all tenant orders, per clarified behavior.
   - Create/update/idempotency writes stamp the active tenant id.
+  - `Order.UserId` and related history fields continue to capture creator/actor identity for audit purposes.
   - No cross-tenant access is possible with a valid token for another tenant.
 - Test notes:
   - Add integration tests for tenant-wide visibility and cross-tenant denial.
@@ -157,7 +196,8 @@
   - Auth state includes active tenant summary and accessible memberships.
   - After login, app lands on the default tenant dashboard.
   - Memberships are loaded from `AuthServer`.
-  - Tenant switch replaces stored token set cleanly.
+  - Tenant switch replaces the stored access token and refresh token cleanly.
+  - Entering direct support mode or impersonation also replaces the stored token pair cleanly.
 - Test notes:
   - Add e2e coverage for login landing and switch behavior.
 - Dependencies:
@@ -175,6 +215,8 @@
   - Platform/global pages live outside tenant routes.
   - Visiting an accessible tenant route auto-switches tenant context.
   - Invalid or inaccessible tenant routes fail safely.
+  - Current `/users` routes redirect into the active tenant members route.
+  - Current `/users/roles` resolves to a platform-only global route or redirect target.
 - Test notes:
   - Add e2e coverage for route-based auto-switch and unauthorized tenant access.
 - Dependencies:
@@ -209,6 +251,7 @@
   - Tenant admin can invite/add, role-change, deactivate, and remove members in their tenant.
   - Tenant admin cannot edit global identity fields.
   - Global role catalog management remains platform-only.
+  - Navigation and dashboard links no longer send tenant admins into obsolete global member-management routes.
 - Test notes:
   - Add e2e coverage for tenant-local membership management and last-admin guardrail.
 - Dependencies:
@@ -226,6 +269,7 @@
   - Platform admin can create/manage tenants.
   - Platform admin can enter direct mode or impersonation mode from platform UI.
   - Self-serve tenant creation path remains separate from platform admin controls.
+  - Role catalog management is reachable as a platform-only global route replacing legacy `/users/roles` assumptions.
 - Test notes:
   - Add e2e coverage for platform-admin-only route guards and support-mode entry points.
 - Dependencies:

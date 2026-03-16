@@ -167,7 +167,7 @@ public sealed class DatabaseSeederTests
     private static string GetOrdersProjectRoot([CallerFilePath] string callerFilePath = "")
     {
         var dir = new DirectoryInfo(Path.GetDirectoryName(callerFilePath)!);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ArchZ.sln")))
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "IdentityVibe.sln")))
         {
             dir = dir.Parent;
         }

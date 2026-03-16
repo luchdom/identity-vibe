@@ -89,7 +89,8 @@ Add a tenant domain to `AuthServer` and move from global user-role assignment to
   - `IsDefault`
 - `TenantInvite`
   - supports pending invite records for brand-new emails
-  - designed for later acceptance/onboarding flow
+  - stores invited email, `TenantId`, intended `RoleId`, inviter, status, and expiry
+  - no `TenantMembership` row exists until acceptance/onboarding completes
 
 Authorization flow:
 
@@ -109,7 +110,7 @@ Authorization flow:
 Normal user login:
 
 1. complete global authentication
-2. resolve active default membership
+2. resolve active default membership; if it is inactive or suspended, auto-fallback to another active membership
 3. issue tenant-scoped app token
 4. load memberships list from `AuthServer`
 5. land at `/t/{tenantSlug}/dashboard`
@@ -119,8 +120,8 @@ Normal tenant switch:
 1. route or switcher requests another tenant
 2. `web-app` calls tenant switch endpoint
 3. `AuthServer` validates active membership and tenant lifecycle
-4. `AuthServer` issues new tenant-scoped token set
-5. `web-app` replaces local tokens and continues in the new tenant route
+4. `AuthServer` issues a fresh tenant-scoped access token and refresh token bound to that exact context
+5. `web-app` discards the old token pair, stores the new pair, and continues in the new tenant route
 
 Platform-admin support mode:
 
@@ -128,7 +129,8 @@ Platform-admin support mode:
 2. platform admin can enter direct tenant mode or impersonation mode
 3. direct mode issues a tenant-scoped support token with actor metadata
 4. impersonation issues a tenant-scoped token for the effective user, plus actor metadata and required reason
-5. all support actions are audit logged
+5. each mode entry issues a fresh context-bound token pair and invalidates the prior client-held pair
+6. all support actions are audit logged
 
 ### Key components and responsibilities
 
@@ -162,7 +164,7 @@ Identity-scoped:
 - `POST /api/auth/tenant-switch`
   - exchanges current authenticated session into a new tenant-scoped token set
   - input: tenant id or slug
-  - output: access token, refresh token, granted scopes, effective tenant summary
+  - output: fresh access token, fresh refresh token, granted scopes, effective tenant summary
 
 Platform/global:
 
@@ -189,9 +191,31 @@ Tenant-context:
 ### Authn/authz expectations
 
 - Tenant APIs authorize primarily by tenant-scoped token claims and scopes.
-- Platform APIs authorize by global `PlatformAdmin` role/scope set.
+- Platform APIs authorize by a separate global platform scope family.
+- Tenant-context APIs authorize by a separate tenant-local scope family derived from the active tenant role.
+- Canonical tenant/support context claims are flat explicit custom claims:
+  - `tenant_id`
+  - `tenant_slug`
+  - `tenant_role`
+  - `effective_user_id`
+  - `actor_user_id`
+  - `support_mode`
+  - `impersonation_mode`
 - Direct support mode and impersonation mode must be explicit in both token claims and audit records.
 - Impersonation requires a reason before token issuance.
+- Tenant switch, direct support mode entry, and impersonation entry each produce a fresh token pair bound to one exact context.
+
+### Scope migration expectations
+
+- Introduce separate scope families for:
+  - global platform administration and support flows
+  - tenant-local membership/settings/business access
+- Do not overload current global admin scopes with tenant-local meaning.
+- Explicitly migrate, replace, or deprecate current `admin.users`, `admin.roles`, and `admin.full` usage across:
+  - `AuthServer` policies
+  - `Orders` policies if impacted
+  - `web-app` route guards and permission helpers
+  - scope catalog and client registrations
 
 ## 5. Data Model & Storage
 
@@ -219,6 +243,7 @@ Recommended constraints:
 - unique `(TenantId, UserId)` membership
 - one default active membership per user
 - one active role reference per membership
+- invite rows carry intended tenant/role for new-email onboarding without requiring nullable `UserId`
 
 ### Orders schema changes
 
@@ -232,7 +257,12 @@ Update uniqueness:
 
 - `Customer.Email` unique per tenant
 - `Order.OrderNumber` unique per tenant
-- `IdempotencyKey` unique per tenant or per tenant+user depending on final implementation choice
+- `IdempotencyKey` unique per tenant via `(TenantId, IdempotencyKey)`
+
+Keep:
+
+- `Order.UserId` as creator/actor audit metadata
+- order-history and idempotency flows should continue to capture acting user id where relevant
 
 ### Migration approach
 
@@ -263,6 +293,7 @@ Work:
 - add tenant, membership, invite, and audit entities
 - add EF configs and migrations
 - replace seed roles/users/data with tenant-aware samples
+- model new-email invites in `TenantInvite` only; create `TenantMembership` only for accepted or already-existing identities
 
 ### Step 2. Update role model and authorization derivation
 
@@ -278,6 +309,8 @@ Work:
 - derive scopes from the active tenant role instead of a global user-role assumption
 - add tenant claims and support/impersonation claims to tokens
 - keep token-scoped claims minimal to one active tenant
+- add separate global-platform and tenant-local scope families
+- migrate or deprecate current `admin.users`, `admin.roles`, and `admin.full` assumptions
 
 ### Step 3. Add memberships, switch, platform, and support APIs
 
@@ -296,6 +329,9 @@ Work:
 - add direct support mode and impersonation APIs
 - add tenant-local membership APIs
 - add self-serve tenant creation API
+- for existing global users, create memberships immediately
+- for brand-new emails, create invite records without creating memberships yet
+- on every context change, issue a fresh access token and refresh token and require the client to discard the previous pair
 
 ### Step 4. Make Orders tenant-aware
 
@@ -315,6 +351,7 @@ Work:
 - filter reads/writes by tenant
 - update query semantics from user-owned to tenant-owned where required
 - update uniqueness and indexes
+- preserve `UserId` on orders as creator/actor audit data, not as the visibility boundary
 
 ### Step 5. Reshape web-app routing and session model
 
@@ -333,6 +370,8 @@ Work:
 - land on default tenant dashboard after login
 - auto-switch when navigating to another accessible tenant route
 - add support-mode banner and exit control
+- redirect current `/users` flows to tenant-local member routes
+- move `/users/roles` to a platform-only global route
 
 ### Step 6. Move admin UI to the right boundary
 
@@ -348,6 +387,7 @@ Work:
 - keep global role catalog platform-managed
 - keep global identity edits out of tenant-admin flows
 - add tenant settings pages
+- update nav, dashboard shortcuts, and e2e coverage away from legacy global admin paths
 
 ### Step 7. Add tests and docs
 
@@ -405,6 +445,19 @@ Work:
 - suspended tenant selected as default
 - removing a membership used by a stale refresh token
 - platform admin switching to unknown tenant or inactive user
+
+### Required contract detail before implementation
+
+- define exact request/response DTOs for:
+  - `GET /api/me/tenants`
+  - `POST /api/auth/tenant-switch`
+  - support-mode start/stop
+  - impersonation start/stop
+  - tenant membership management APIs
+- define the final frontend route map for:
+  - global authenticated routes
+  - `/t/{tenantSlug}/...` tenant routes
+  - legacy redirects from `/users` and `/users/roles`
 
 ## 8. Observability / Debuggability
 

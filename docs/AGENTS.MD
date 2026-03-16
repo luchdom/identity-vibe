@@ -42,7 +42,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build postgr
 
 - When a refactor makes code unused, remove the dead code in the same pass (including DI registrations/usings/tests/docs references).
 - Treat repeated warnings like unused parameters and `async` without `await` as cleanup debt to fix while touching the file.
-- Keep solution/project hygiene up to date (for example add new test projects to `ArchZ.sln`).
+- Keep solution/project hygiene up to date (for example add new test projects to `IdentityVibe.sln`).
 
 ## Manual Smoke
 

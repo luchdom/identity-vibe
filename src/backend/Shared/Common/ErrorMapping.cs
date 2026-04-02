@@ -28,6 +28,12 @@ public static class ErrorMapping
         ["INVALID_PASSWORD"] = ErrorCategory.Validation,
         ["INVALID_INPUT"] = ErrorCategory.Validation,
         ["INVALID_REQUEST"] = ErrorCategory.Validation,
+        ["NO_ITEMS"] = ErrorCategory.Validation,
+        ["TOO_MANY_ITEMS"] = ErrorCategory.Validation,
+        ["DUPLICATE_SKU"] = ErrorCategory.Validation,
+        ["MINIMUM_ORDER_AMOUNT"] = ErrorCategory.Validation,
+        ["MAX_LENGTH"] = ErrorCategory.Validation,
+        ["INVALID_ROLE_NAME"] = ErrorCategory.Validation,
 
         // Business Logic
         ["BUSINESS_RULE_VIOLATION"] = ErrorCategory.BusinessLogic,

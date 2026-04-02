@@ -1,5 +1,6 @@
 using AuthServer.Models.AdminRoles;
 using AuthServer.Services.Interfaces;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Common;
@@ -9,80 +10,98 @@ namespace AuthServer.Controllers;
 [ApiController]
 [Route("api/admin/roles")]
 [Authorize(Policy = AdminRolesManagementPolicy)]
-public sealed class AdminRolesController(IRoleAdminService roleAdminService) : ControllerBase
+public sealed class AdminRolesController(
+    IRoleAdminService roleAdminService,
+    IValidator<CreateRoleRequest> createRoleRequestValidator,
+    IValidator<UpdateRoleRequest> updateRoleRequestValidator,
+    IValidator<UpdateRoleScopesRequest> updateRoleScopesRequestValidator) : ControllerBase
 {
     public const string AdminRolesManagementPolicy = "AdminRolesManagement";
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<AdminRoleResponse>>> ListRoles()
+    public async Task<IActionResult> ListRoles()
     {
         var result = await roleAdminService.ListRolesAsync();
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpGet("available-scopes")]
-    public ActionResult<IReadOnlyList<AvailableScopeResponse>> GetAvailableScopes()
+    public IActionResult GetAvailableScopes()
     {
         var result = roleAdminService.GetAvailableScopes();
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpGet("{roleId}")]
-    public async Task<ActionResult<AdminRoleDetailResponse>> GetRole(string roleId)
+    public async Task<IActionResult> GetRole(string roleId)
     {
+        var routeGuard = RequireRouteValue<AdminRoleDetailResponse>(roleId, "roleId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
         var result = await roleAdminService.GetRoleAsync(roleId);
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPost]
-    public async Task<ActionResult<AdminRoleDetailResponse>> CreateRole([FromBody] CreateRoleRequest request)
+    public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
     {
-        var result = await roleAdminService.CreateRoleAsync(request);
-        if (result.IsSuccess)
+        var validationResult = await createRoleRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
         {
-            return CreatedAtAction(nameof(GetRole), new { roleId = result.Value.Id }, result.Value);
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        return ToProblem(result.Error);
+        var result = await roleAdminService.CreateRoleAsync(validationResult.Value);
+        return result.ToActionResultWithProblemDetails(
+            HttpContext,
+            value => CreatedAtAction(nameof(GetRole), new { roleId = value.Id }, value));
     }
 
     [HttpPut("{roleId}")]
-    public async Task<ActionResult<AdminRoleDetailResponse>> UpdateRole(string roleId, [FromBody] UpdateRoleRequest request)
+    public async Task<IActionResult> UpdateRole(string roleId, [FromBody] UpdateRoleRequest request)
     {
-        var result = await roleAdminService.UpdateRoleAsync(roleId, request);
-        return ToActionResult(result);
+        var routeGuard = RequireRouteValue<AdminRoleDetailResponse>(roleId, "roleId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
+        var validationResult = await updateRoleRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await roleAdminService.UpdateRoleAsync(roleId, validationResult.Value);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPut("{roleId}/scopes")]
-    public async Task<ActionResult<AdminRoleDetailResponse>> UpdateRoleScopes(string roleId, [FromBody] UpdateRoleScopesRequest request)
+    public async Task<IActionResult> UpdateRoleScopes(string roleId, [FromBody] UpdateRoleScopesRequest request)
     {
-        var result = await roleAdminService.UpdateRoleScopesAsync(roleId, request);
-        return ToActionResult(result);
-    }
-
-    private ActionResult<T> ToActionResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
+        var routeGuard = RequireRouteValue<AdminRoleDetailResponse>(roleId, "roleId");
+        if (routeGuard is not null)
         {
-            return Ok(result.Value);
+            return routeGuard;
         }
 
-        return ToProblem(result.Error);
+        var validationResult = await updateRoleScopesRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await roleAdminService.UpdateRoleScopesAsync(roleId, validationResult.Value);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
-    private ActionResult ToProblem(Error error)
+    private IActionResult? RequireRouteValue<TResponse>(string? value, string fieldName)
     {
-        var statusCode = error.Code switch
-        {
-            "NOT_FOUND" => StatusCodes.Status404NotFound,
-            "CONFLICT" => StatusCodes.Status409Conflict,
-            "VALIDATION_FAILED" or "REQUIRED_FIELD" => StatusCodes.Status400BadRequest,
-            _ => StatusCodes.Status500InternalServerError
-        };
-
-        return Problem(
-            statusCode: statusCode,
-            title: error.Code,
-            detail: error.Message);
+        return string.IsNullOrWhiteSpace(value)
+            ? CommonErrors.RequiredField(fieldName).ToResult<TResponse>().ToActionResultWithProblemDetails(HttpContext)
+            : null;
     }
 }

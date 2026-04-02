@@ -5,6 +5,7 @@ using AuthServer.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Shared.Common;
+using SharedResultExtensions = Shared.Common.ResultExtensions;
 
 namespace AuthServer.Services;
 
@@ -121,23 +122,18 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to list admin users");
-            return Result<AdminUserListResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserListResponse>(CommonErrors.DatabaseError);
         }
     }
 
     public async Task<Result<AdminUserDetailResponse>> GetUserAsync(string userId)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("userId"));
-        }
-
         try
         {
             var user = await userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.NotFound("User"));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.NotFound("User"));
             }
 
             return Result<AdminUserDetailResponse>.Success(await MapUserDetailAsync(user));
@@ -145,7 +141,7 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to get user {UserId}", userId);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
@@ -175,46 +171,27 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to list available roles for user administration");
-            return Result<IReadOnlyList<AdminRoleOptionResponse>>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<IReadOnlyList<AdminRoleOptionResponse>>(CommonErrors.DatabaseError);
         }
     }
 
     public async Task<Result<AdminUserDetailResponse>> CreateUserAsync(CreateUserRequest request)
     {
-        if (request is null)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("request"));
-        }
-
-        var normalizedEmail = request.Email?.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedEmail))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("email"));
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Password))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("password"));
-        }
-
+        var normalizedEmail = request.Email.Trim();
         var roleNames = NormalizeRoleNames(request.RoleNames);
-        if (roleNames.Length == 0)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed("At least one active role is required."));
-        }
 
         try
         {
             var existingUser = await userManager.FindByEmailAsync(normalizedEmail);
             if (existingUser != null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.Conflict($"User '{normalizedEmail}' already exists."));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.Conflict($"User '{normalizedEmail}' already exists."));
             }
 
             var resolvedRolesResult = await ResolveActiveRolesAsync(roleNames);
-            if (resolvedRolesResult.IsFailure)
+            if (!resolvedRolesResult.IsSuccess)
             {
-                return Result<AdminUserDetailResponse>.Failure(resolvedRolesResult.Error);
+                return SharedResultExtensions.ToFailureResult<List<AppRole>, AdminUserDetailResponse>(resolvedRolesResult);
             }
 
             var user = new AppUser
@@ -230,14 +207,14 @@ public sealed class UserAdminService(
             var createResult = await userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed(FormatIdentityErrors(createResult.Errors)));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.ValidationFailed(FormatIdentityErrors(createResult.Errors)));
             }
 
             var roleAssignmentResult = await userManager.AddToRolesAsync(user, roleNames);
             if (!roleAssignmentResult.Succeeded)
             {
                 await userManager.DeleteAsync(user);
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed(FormatIdentityErrors(roleAssignmentResult.Errors)));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.ValidationFailed(FormatIdentityErrors(roleAssignmentResult.Errors)));
             }
 
             logger.LogInformation("Admin user created. UserId={UserId}, Email={Email}", user.Id, user.Email);
@@ -246,45 +223,30 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to create admin user for email {Email}", normalizedEmail);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
     public async Task<Result<AdminUserDetailResponse>> UpdateUserAsync(string userId, UpdateUserRequest request)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("userId"));
-        }
-
-        if (request is null)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("request"));
-        }
-
         try
         {
             var user = await userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.NotFound("User"));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.NotFound("User"));
             }
 
             var hasChanges = false;
             var nextEmail = request.Email?.Trim();
             if (nextEmail != null)
             {
-                if (string.IsNullOrWhiteSpace(nextEmail))
-                {
-                    return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed("Email cannot be empty."));
-                }
-
                 if (!string.Equals(user.Email, nextEmail, StringComparison.OrdinalIgnoreCase))
                 {
                     var existingByEmail = await userManager.FindByEmailAsync(nextEmail);
                     if (existingByEmail != null && !string.Equals(existingByEmail.Id, user.Id, StringComparison.Ordinal))
                     {
-                        return Result<AdminUserDetailResponse>.Failure(CommonErrors.Conflict($"Email '{nextEmail}' is already in use."));
+                        return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.Conflict($"Email '{nextEmail}' is already in use."));
                     }
 
                     user.Email = nextEmail;
@@ -306,7 +268,7 @@ public sealed class UserAdminService(
                 var updateResult = await userManager.UpdateAsync(user);
                 if (!updateResult.Succeeded)
                 {
-                    return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed(FormatIdentityErrors(updateResult.Errors)));
+                    return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.ValidationFailed(FormatIdentityErrors(updateResult.Errors)));
                 }
             }
 
@@ -315,7 +277,7 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update user {UserId}", userId);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
@@ -324,19 +286,9 @@ public sealed class UserAdminService(
         UpdateUserRolesRequest request,
         string actorUserId)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("userId"));
-        }
-
         if (string.IsNullOrWhiteSpace(actorUserId))
         {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.Unauthorized);
-        }
-
-        if (request is null)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("request"));
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.Unauthorized);
         }
 
         try
@@ -344,14 +296,14 @@ public sealed class UserAdminService(
             var user = await userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.NotFound("User"));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.NotFound("User"));
             }
 
             var normalizedRoleNames = NormalizeRoleNames(request.RoleNames);
             var resolvedRolesResult = await ResolveActiveRolesAsync(normalizedRoleNames);
-            if (resolvedRolesResult.IsFailure)
+            if (!resolvedRolesResult.IsSuccess)
             {
-                return Result<AdminUserDetailResponse>.Failure(resolvedRolesResult.Error);
+                return SharedResultExtensions.ToFailureResult<List<AppRole>, AdminUserDetailResponse>(resolvedRolesResult);
             }
 
             var resolvedRoles = resolvedRolesResult.Value;
@@ -360,7 +312,7 @@ public sealed class UserAdminService(
                 var hasAdminManagementScope = await HasAdminManagementScopeAsync(resolvedRoles.Select(role => role.Id).ToArray());
                 if (!hasAdminManagementScope)
                 {
-                    return Result<AdminUserDetailResponse>.Failure(
+                    return SharedResultExtensions.Failure<AdminUserDetailResponse>(
                         CommonErrors.ValidationFailed("Cannot remove your own admin.users/admin.full access."));
                 }
             }
@@ -390,7 +342,7 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update roles for user {UserId}", userId);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
@@ -399,24 +351,14 @@ public sealed class UserAdminService(
         UpdateUserStatusRequest request,
         string actorUserId)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("userId"));
-        }
-
         if (string.IsNullOrWhiteSpace(actorUserId))
         {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.Unauthorized);
-        }
-
-        if (request is null)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("request"));
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.Unauthorized);
         }
 
         if (string.Equals(userId, actorUserId, StringComparison.Ordinal) && !request.IsActive)
         {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed("You cannot disable your own account."));
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.ValidationFailed("You cannot disable your own account."));
         }
 
         try
@@ -424,7 +366,7 @@ public sealed class UserAdminService(
             var user = await userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.NotFound("User"));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.NotFound("User"));
             }
 
             if (user.IsActive != request.IsActive)
@@ -440,33 +382,18 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to update status for user {UserId}", userId);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
     public async Task<Result<AdminUserDetailResponse>> ResetUserPasswordAsync(string userId, ResetUserPasswordRequest request)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("userId"));
-        }
-
-        if (request is null)
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("request"));
-        }
-
-        if (string.IsNullOrWhiteSpace(request.NewPassword))
-        {
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.RequiredField("newPassword"));
-        }
-
         try
         {
             var user = await userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.NotFound("User"));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.NotFound("User"));
             }
 
             var resetToken = await userManager.GeneratePasswordResetTokenAsync(user);
@@ -474,7 +401,7 @@ public sealed class UserAdminService(
 
             if (!resetResult.Succeeded)
             {
-                return Result<AdminUserDetailResponse>.Failure(CommonErrors.ValidationFailed(FormatIdentityErrors(resetResult.Errors)));
+                return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.ValidationFailed(FormatIdentityErrors(resetResult.Errors)));
             }
 
             user.UpdatedAt = DateTime.UtcNow;
@@ -487,7 +414,7 @@ public sealed class UserAdminService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to reset password for user {UserId}", userId);
-            return Result<AdminUserDetailResponse>.Failure(CommonErrors.DatabaseError);
+            return SharedResultExtensions.Failure<AdminUserDetailResponse>(CommonErrors.DatabaseError);
         }
     }
 
@@ -567,7 +494,7 @@ public sealed class UserAdminService(
 
         if (missingRoleNames.Length > 0)
         {
-            return Result<List<AppRole>>.Failure(
+            return SharedResultExtensions.Failure<List<AppRole>>(
                 CommonErrors.ValidationFailed($"Unknown role(s): {string.Join(", ", missingRoleNames)}"));
         }
 
@@ -579,7 +506,7 @@ public sealed class UserAdminService(
 
         if (inactiveRoleNames.Length > 0)
         {
-            return Result<List<AppRole>>.Failure(
+            return SharedResultExtensions.Failure<List<AppRole>>(
                 CommonErrors.ValidationFailed($"Inactive role(s) cannot be assigned: {string.Join(", ", inactiveRoleNames)}"));
         }
 

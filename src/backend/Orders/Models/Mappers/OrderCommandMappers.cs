@@ -1,53 +1,49 @@
 using Orders.Models.Commands;
-using Orders.Models.ViewModels;
+using Orders.Models.Results;
 
 namespace Orders.Models.Mappers;
 
 public static class OrderCommandMappers
 {
-    // Command → Domain mapping (used by Service layer)
-    public static CustomerViewModel ToDomain(this CustomerCommand command) => new()
-    {
-        Id = 0, // Will be set by repository
-        FirstName = command.FirstName,
-        LastName = command.LastName,
-        Email = command.Email,
-        Phone = command.Phone,
-        Address = command.Address,
-        City = command.City,
-        State = command.State,
-        PostalCode = command.PostalCode,
-        Country = command.Country,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
+    public static CustomerResult ToResultModel(this CustomerCommand command) =>
+        new(
+            0,
+            command.FirstName,
+            command.LastName,
+            command.Email,
+            command.Phone,
+            command.Address,
+            command.City,
+            command.State,
+            command.PostalCode,
+            command.Country,
+            DateTime.UtcNow,
+            DateTime.UtcNow);
 
-    public static ShippingViewModel ToDomain(this ShippingCommand command) => new()
-    {
-        Address = command.Address,
-        City = command.City,
-        State = command.State,
-        PostalCode = command.PostalCode,
-        Country = command.Country,
-        ShippingCost = command.ShippingCost,
-        ShippingMethod = command.ShippingMethod,
-        Notes = command.Notes
-    };
+    public static ShippingResult ToResultModel(this ShippingCommand command) =>
+        new(
+            command.Address,
+            command.City,
+            command.State,
+            command.PostalCode,
+            command.Country,
+            command.ShippingCost,
+            command.ShippingMethod,
+            command.Notes);
 
-    public static OrderItemViewModel ToDomain(this OrderItemCommand command) => new()
-    {
-        Id = 0, // Will be set by repository
-        ProductSku = command.ProductSku,
-        ProductName = command.ProductName,
-        ProductDescription = command.ProductDescription,
-        ProductImageUrl = command.ProductImageUrl,
-        ProductCategory = command.ProductCategory,
-        Quantity = command.Quantity,
-        UnitPrice = command.UnitPrice,
-        DiscountAmount = command.DiscountAmount,
-        TotalPrice = (command.UnitPrice * command.Quantity) - command.DiscountAmount,
-        Size = command.Size,
-        Color = command.Color,
-        AdditionalAttributes = command.AdditionalAttributes
-    };
+    public static OrderItemResult ToResultModel(this OrderItemCommand command) =>
+        new(
+            0,
+            command.ProductSku,
+            command.ProductName,
+            command.ProductDescription,
+            command.ProductImageUrl,
+            command.ProductCategory,
+            command.Quantity,
+            command.UnitPrice,
+            command.DiscountAmount,
+            (command.UnitPrice * command.Quantity) - command.DiscountAmount,
+            command.Size,
+            command.Color,
+            command.AdditionalAttributes);
 }

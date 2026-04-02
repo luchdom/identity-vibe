@@ -1,323 +1,355 @@
 using Orders.Data.Entities;
 using Orders.Data.Entities.Mappers;
+using Orders.Data.Repositories.Interfaces;
 using Orders.Models.Commands;
 using Orders.Models.Enums;
 using Orders.Models.Mappers;
 using Orders.Models.Queries;
 using Orders.Models.Results;
-using Orders.Models.ViewModels;
-using Orders.Repositories.Interfaces;
 using Orders.Services.Interfaces;
 using Shared.Common;
 
 namespace Orders.Services;
 
-public class OrdersService(
-    IOrdersRepository ordersRepository) : IOrdersService
+public class OrdersService(IOrdersRepository ordersRepository) : IOrdersService
 {
-    // Business constants
-    private const decimal DefaultTaxRate = 0.08m; // 8% tax
-    private const decimal MinimumOrderAmount = 1.00m;
-    private const int MaxItemsPerOrder = 100;
+    private const decimal DefaultTaxRate = 0.08m;
 
     public async Task<Result<OrderResult>> CreateOrderAsync(CreateOrderCommand command)
     {
-        // Validate business rules
-        var validationResult = ValidateCreateOrderCommand(command);
-        if (validationResult.IsFailure)
-            return Result<OrderResult>.Failure(validationResult.Error);
-
-        // Find or create customer using domain model
-        var customerData = command.Customer.ToDomain();
-        var customerResult = await ordersRepository.FindOrCreateCustomerAsync(customerData);
-        if (customerResult.IsFailure)
-            return Result<OrderResult>.Failure(customerResult.Error);
-
-        var customer = customerResult.Value!;
-
-        // Generate order number
-        var orderNumber = await ordersRepository.GenerateOrderNumberAsync();
-
-        // Convert items to domain
-        var domainItems = command.Items.Select(item => item.ToDomain()).ToList();
-        
-        // Calculate totals
-        var subtotal = domainItems.Sum(item => item.TotalPrice);
-        var tax = subtotal * DefaultTaxRate;
-        var shipping = command.Shipping?.ShippingCost ?? 0;
-        var total = subtotal + tax + shipping;
-
-        // Create order entity
-        var order = new Order
+        try
         {
-            OrderNumber = orderNumber,
-            CustomerId = customer.Id,
-            UserId = command.UserId,
-            Status = OrderStatus.Draft,
-            SubtotalAmount = subtotal,
-            TaxAmount = tax,
-            ShippingAmount = shipping,
-            TotalAmount = total,
-            SpecialInstructions = command.SpecialInstructions,
-            CorrelationId = command.CorrelationId,
-            IdempotencyKey = command.IdempotencyKey,
-            Source = "API"
-        };
+            var customer = await ordersRepository.FindOrCreateCustomerAsync(command.Customer.ToResultModel());
+            var orderNumber = await ordersRepository.GenerateOrderNumberAsync();
+            var domainItems = command.Items.Select(item => item.ToResultModel()).ToList();
 
-        // Set shipping info if provided
-        if (command.Shipping != null)
-        {
-            var shippingData = command.Shipping.ToDomain();
-            order.ShippingAddress = shippingData.Address;
-            order.ShippingCity = shippingData.City;
-            order.ShippingState = shippingData.State;
-            order.ShippingPostalCode = shippingData.PostalCode;
-            order.ShippingCountry = shippingData.Country;
+            var subtotal = domainItems.Sum(item => item.TotalPrice);
+            var tax = subtotal * DefaultTaxRate;
+            var shippingAmount = command.Shipping?.ShippingCost ?? 0;
+
+            var order = new Order
+            {
+                OrderNumber = orderNumber,
+                CustomerId = customer.Id,
+                UserId = command.UserId,
+                Status = OrderStatus.Draft,
+                SubtotalAmount = subtotal,
+                TaxAmount = tax,
+                ShippingAmount = shippingAmount,
+                TotalAmount = subtotal + tax + shippingAmount,
+                SpecialInstructions = command.SpecialInstructions,
+                CorrelationId = command.CorrelationId,
+                IdempotencyKey = command.IdempotencyKey,
+                Source = "API"
+            };
+
+            if (command.Shipping != null)
+            {
+                var shipping = command.Shipping.ToResultModel();
+                order.ShippingAddress = shipping.Address;
+                order.ShippingCity = shipping.City;
+                order.ShippingState = shipping.State;
+                order.ShippingPostalCode = shipping.PostalCode;
+                order.ShippingCountry = shipping.Country;
+            }
+
+            var orderItems = domainItems.Select(item => item.ToEntity(0)).ToList();
+            var statusHistory = new OrderStatusHistory
+            {
+                OrderId = 0,
+                FromStatus = OrderStatus.Draft,
+                ToStatus = OrderStatus.Draft,
+                Reason = "Order created",
+                ChangedByUserId = command.UserId,
+                CorrelationId = command.CorrelationId
+            };
+
+            var createdOrder = await ordersRepository.CreateOrderAsync(order, orderItems, statusHistory);
+            return Result<OrderResult>.Success(new OrderResult
+            {
+                Order = createdOrder,
+                CorrelationId = command.CorrelationId
+            });
         }
-
-        // Create order items entities
-        var orderItems = domainItems.Select(item => item.ToEntity(0)).ToList(); // OrderId will be set by repository
-
-        // Create initial status history
-        var statusHistory = new OrderStatusHistory
+        catch (Exception ex)
         {
-            OrderId = 0, // Will be set by repository
-            FromStatus = OrderStatus.Draft,
-            ToStatus = OrderStatus.Draft,
-            Reason = "Order created",
-            ChangedByUserId = command.UserId,
-            CorrelationId = command.CorrelationId
-        };
-
-        // Use repository for data persistence
-        var repositoryResult = await ordersRepository.CreateOrderAsync(order, orderItems, statusHistory);
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        // Return domain result
-        return Result<OrderResult>.Success(new OrderResult
-        {
-            Order = repositoryResult.Value,
-            CorrelationId = command.CorrelationId
-        });
+            return new Error("ORDER_CREATION_ERROR", $"An error occurred while creating the order: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<OrdersListResult>> GetOrdersAsync(GetOrdersQuery query)
     {
-        var repositoryResult = await ordersRepository.GetOrdersAsync(query.UserId, query.Page, query.PageSize, query.Status);
-        if (repositoryResult.IsFailure)
-            return Result<OrdersListResult>.Failure(repositoryResult.Error);
-
-        var (orders, totalCount) = repositoryResult.Value;
-        var totalPages = (int)Math.Ceiling((double)totalCount / query.PageSize);
-        
-        var paginationData = new PaginationViewModel
+        try
         {
-            TotalCount = totalCount,
-            PageNumber = query.Page,
-            PageSize = query.PageSize,
-            TotalPages = totalPages,
-            HasPreviousPage = query.Page > 1,
-            HasNextPage = query.Page < totalPages
-        };
-
-        return Result<OrdersListResult>.Success(new OrdersListResult
+            var (orders, totalCount) = await ordersRepository.GetOrdersAsync(query.UserId, query.Page, query.PageSize, query.Status);
+            return Result<OrdersListResult>.Success(CreateOrdersListResult(query.Page, query.PageSize, orders, totalCount));
+        }
+        catch (Exception ex)
         {
-            Orders = orders,
-            Pagination = paginationData
-        });
+            return new Error("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}")
+                .ToResult<OrdersListResult>();
+        }
     }
 
     public async Task<Result<OrdersListResult>> GetAllOrdersAsync(GetAllOrdersQuery query)
     {
-        var repositoryResult = await ordersRepository.GetAllOrdersAsync(query.Page, query.PageSize, query.Status);
-        if (repositoryResult.IsFailure)
-            return Result<OrdersListResult>.Failure(repositoryResult.Error);
-
-        var (orders, totalCount) = repositoryResult.Value;
-        var totalPages = (int)Math.Ceiling((double)totalCount / query.PageSize);
-        
-        var paginationData = new PaginationViewModel
+        try
         {
-            TotalCount = totalCount,
-            PageNumber = query.Page,
-            PageSize = query.PageSize,
-            TotalPages = totalPages,
-            HasPreviousPage = query.Page > 1,
-            HasNextPage = query.Page < totalPages
-        };
-
-        return Result<OrdersListResult>.Success(new OrdersListResult
+            var (orders, totalCount) = await ordersRepository.GetAllOrdersAsync(query.Page, query.PageSize, query.Status);
+            return Result<OrdersListResult>.Success(CreateOrdersListResult(query.Page, query.PageSize, orders, totalCount));
+        }
+        catch (Exception ex)
         {
-            Orders = orders,
-            Pagination = paginationData
-        });
+            return new Error("GET_ORDERS_ERROR", $"An error occurred while retrieving orders: {ex.Message}")
+                .ToResult<OrdersListResult>();
+        }
     }
 
     public async Task<Result<OrderResult>> GetOrderByIdAsync(GetOrderByIdQuery query)
     {
-        var userId = query.IsAdminRequest ? null : query.UserId;
-        var repositoryResult = await ordersRepository.GetOrderByIdAsync(query.OrderId, userId, includeHistory: true);
-        
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        if (repositoryResult.Value == null)
+        try
         {
-            return Result<OrderResult>.Failure("ORDER_NOT_FOUND", "Order not found or access denied");
+            var userId = query.IsAdminRequest ? null : query.UserId;
+            var order = await ordersRepository.GetOrderByIdAsync(query.OrderId, userId, includeHistory: true);
+
+            if (order == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderResult>();
+            }
+
+            return Result<OrderResult>.Success(new OrderResult { Order = order });
         }
-
-        return Result<OrderResult>.Success(new OrderResult
+        catch (Exception ex)
         {
-            Order = repositoryResult.Value
-        });
+            return new Error("GET_ORDER_ERROR", $"An error occurred while retrieving the order: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<OrderResult>> UpdateOrderAsync(UpdateOrderCommand command)
     {
-        // Convert command data to domain models
-        var customerData = command.Customer?.ToDomain();
-        var itemsData = command.Items?.Select(item => item.ToDomain()).ToList();
-        var shippingData = command.Shipping?.ToDomain();
-
-        // Use repository for update
-        var repositoryResult = await ordersRepository.UpdateOrderAsync(
-            command.OrderId, 
-            command.UserId, 
-            customerData, 
-            itemsData, 
-            shippingData, 
-            command.SpecialInstructions);
-
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        return Result<OrderResult>.Success(new OrderResult
+        try
         {
-            Order = repositoryResult.Value,
-            CorrelationId = command.CorrelationId
-        });
+            var existingOrder = await ordersRepository.GetOrderByIdAsync(command.OrderId, command.UserId, includeHistory: true);
+            if (existingOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderResult>();
+            }
+
+            if (!existingOrder.CanBeModified)
+            {
+                return new Error("ORDER_CANNOT_BE_MODIFIED", $"Order in {existingOrder.Status} status cannot be modified")
+                    .ToResult<OrderResult>();
+            }
+
+            var updatedOrder = await ordersRepository.UpdateOrderAsync(
+                command.OrderId,
+                command.UserId,
+                command.Customer?.ToResultModel(),
+                command.Items?.Select(item => item.ToResultModel()).ToList(),
+                command.Shipping?.ToResultModel(),
+                command.SpecialInstructions);
+
+            if (updatedOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderResult>();
+            }
+
+            return Result<OrderResult>.Success(new OrderResult
+            {
+                Order = updatedOrder,
+                CorrelationId = command.CorrelationId
+            });
+        }
+        catch (Exception ex)
+        {
+            return new Error("ORDER_UPDATE_ERROR", $"An error occurred while updating the order: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<OrderResult>> CancelOrderAsync(CancelOrderCommand command)
     {
-        var repositoryResult = await ordersRepository.CancelOrderAsync(
-            command.OrderId, 
-            command.UserId, 
-            command.CancellationReason, 
-            command.Notes);
-
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        return Result<OrderResult>.Success(new OrderResult
+        try
         {
-            Order = repositoryResult.Value,
-            CorrelationId = command.CorrelationId
-        });
+            var existingOrder = await ordersRepository.GetOrderByIdAsync(command.OrderId, command.UserId, includeHistory: true);
+            if (existingOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderResult>();
+            }
+
+            if (!existingOrder.CanBeCancelled)
+            {
+                return new Error("ORDER_CANNOT_BE_CANCELLED", $"Order in {existingOrder.Status} status cannot be cancelled")
+                    .ToResult<OrderResult>();
+            }
+
+            var cancelledOrder = await ordersRepository.CancelOrderAsync(
+                command.OrderId,
+                command.UserId,
+                command.CancellationReason,
+                command.Notes);
+
+            if (cancelledOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderResult>();
+            }
+
+            return Result<OrderResult>.Success(new OrderResult
+            {
+                Order = cancelledOrder,
+                CorrelationId = command.CorrelationId
+            });
+        }
+        catch (Exception ex)
+        {
+            return new Error("ORDER_CANCEL_ERROR", $"An error occurred while cancelling the order: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<OrderStatusResult>> GetOrderStatusAsync(GetOrderStatusQuery query)
     {
-        var userId = query.IsAdminRequest ? null : query.UserId;
-        var repositoryResult = await ordersRepository.GetOrderStatusAsync(query.OrderId, userId);
-        
-        if (repositoryResult.IsFailure)
-            return Result<OrderStatusResult>.Failure(repositoryResult.Error);
-
-        return Result<OrderStatusResult>.Success(new OrderStatusResult
+        try
         {
-            StatusData = repositoryResult.Value
-        });
+            var userId = query.IsAdminRequest ? null : query.UserId;
+            var statusData = await ordersRepository.GetOrderStatusAsync(query.OrderId, userId);
+
+            if (statusData == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<OrderStatusResult>();
+            }
+
+            return Result<OrderStatusResult>.Success(new OrderStatusResult { StatusData = statusData });
+        }
+        catch (Exception ex)
+        {
+            return new Error("GET_ORDER_STATUS_ERROR", $"An error occurred while retrieving order status: {ex.Message}")
+                .ToResult<OrderStatusResult>();
+        }
     }
 
     public async Task<Result<OrderResult>> UpdateOrderStatusAsync(UpdateOrderStatusCommand command)
     {
-        var repositoryResult = await ordersRepository.UpdateOrderStatusAsync(
-            command.OrderId, 
-            command.Status, 
-            command.UserId, 
-            command.Reason, 
-            command.Notes);
-
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        return Result<OrderResult>.Success(new OrderResult
+        try
         {
-            Order = repositoryResult.Value
-        });
+            var existingOrder = await ordersRepository.GetOrderByIdAsync(command.OrderId, includeHistory: true);
+            if (existingOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found").ToResult<OrderResult>();
+            }
+
+            if (!IsValidStatusTransition(existingOrder.Status, command.Status))
+            {
+                return new Error("INVALID_STATUS_TRANSITION", $"Cannot change status from {existingOrder.Status} to {command.Status}")
+                    .ToResult<OrderResult>();
+            }
+
+            var updatedOrder = await ordersRepository.UpdateOrderStatusAsync(
+                command.OrderId,
+                command.Status,
+                command.UserId,
+                command.Reason,
+                command.Notes);
+
+            if (updatedOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found").ToResult<OrderResult>();
+            }
+
+            return Result<OrderResult>.Success(new OrderResult { Order = updatedOrder });
+        }
+        catch (Exception ex)
+        {
+            return new Error("ORDER_STATUS_UPDATE_ERROR", $"An error occurred while updating order status: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<OrderResult>> AddTrackingNumberAsync(AddTrackingNumberCommand command)
     {
-        var repositoryResult = await ordersRepository.AddTrackingNumberAsync(
-            command.OrderId, 
-            command.TrackingNumber, 
-            command.UserId);
-
-        if (repositoryResult.IsFailure)
-            return Result<OrderResult>.Failure(repositoryResult.Error);
-
-        return Result<OrderResult>.Success(new OrderResult
+        try
         {
-            Order = repositoryResult.Value
-        });
+            var existingOrder = await ordersRepository.GetOrderByIdAsync(command.OrderId, includeHistory: true);
+            if (existingOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found").ToResult<OrderResult>();
+            }
+
+            var updatedOrder = await ordersRepository.AddTrackingNumberAsync(command.OrderId, command.TrackingNumber, command.UserId);
+            if (updatedOrder == null)
+            {
+                return new Error("ORDER_NOT_FOUND", "Order not found").ToResult<OrderResult>();
+            }
+
+            return Result<OrderResult>.Success(new OrderResult { Order = updatedOrder });
+        }
+        catch (Exception ex)
+        {
+            return new Error("ADD_TRACKING_ERROR", $"An error occurred while adding tracking number: {ex.Message}")
+                .ToResult<OrderResult>();
+        }
     }
 
     public async Task<Result<bool>> CanModifyOrderAsync(int orderId, string userId)
     {
-        return await ordersRepository.CanModifyOrderAsync(orderId, userId);
+        try
+        {
+            var canModify = await ordersRepository.CanModifyOrderAsync(orderId, userId);
+            return canModify.HasValue
+                ? Result<bool>.Success(canModify.Value)
+                : new Error("ORDER_NOT_FOUND", "Order not found or access denied").ToResult<bool>();
+        }
+        catch (Exception ex)
+        {
+            return new Error("CHECK_MODIFY_ERROR", $"An error occurred while checking order modification status: {ex.Message}")
+                .ToResult<bool>();
+        }
     }
 
-    public async Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemViewModel> items, decimal shippingCost = 0, decimal taxRate = DefaultTaxRate)
+    public Task<Result<decimal>> CalculateOrderTotalAsync(List<OrderItemResult> items, decimal shippingCost = 0, decimal taxRate = DefaultTaxRate)
     {
         try
         {
             var subtotal = items.Sum(item => item.TotalPrice);
             var tax = subtotal * taxRate;
-            var total = subtotal + tax + shippingCost;
-
-            return await Task.FromResult(Result<decimal>.Success(total));
+            return Task.FromResult(Result<decimal>.Success(subtotal + tax + shippingCost));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return Result<decimal>.Failure("CALCULATION_ERROR", "An error occurred while calculating order total");
+            return Task.FromResult(new Error("CALCULATION_ERROR", $"An error occurred while calculating order total: {ex.Message}")
+                .ToResult<decimal>());
         }
     }
 
-    #region Private Helper Methods
-
-    private static Result ValidateCreateOrderCommand(CreateOrderCommand command)
+    private static OrdersListResult CreateOrdersListResult(int page, int pageSize, List<OrderDetailsResult> orders, int totalCount)
     {
-        if (command.Items.Count == 0)
+        var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+        return new OrdersListResult
         {
-            return Result.Failure("NO_ITEMS", "Order must contain at least one item");
-        }
-
-        if (command.Items.Count > MaxItemsPerOrder)
-        {
-            return Result.Failure("TOO_MANY_ITEMS", $"Order cannot contain more than {MaxItemsPerOrder} items");
-        }
-
-        var subtotal = command.Items.Sum(item => (item.UnitPrice * item.Quantity) - item.DiscountAmount);
-        if (subtotal < MinimumOrderAmount)
-        {
-            return Result.Failure("MINIMUM_ORDER_AMOUNT", $"Order must be at least ${MinimumOrderAmount:F2}");
-        }
-
-        // Check for duplicate SKUs
-        var duplicateSku = command.Items
-            .GroupBy(item => item.ProductSku)
-            .FirstOrDefault(g => g.Count() > 1);
-
-        if (duplicateSku != null)
-        {
-            return Result.Failure("DUPLICATE_SKU", $"Duplicate product SKU found: {duplicateSku.Key}");
-        }
-
-        return Result.Success();
+            Orders = orders,
+            Pagination = new PaginationResult(
+                totalCount,
+                page,
+                pageSize,
+                totalPages,
+                page > 1,
+                page < totalPages)
+        };
     }
 
-    #endregion
+    private static bool IsValidStatusTransition(OrderStatus currentStatus, OrderStatus newStatus)
+    {
+        return currentStatus switch
+        {
+            OrderStatus.Draft => newStatus is OrderStatus.Confirmed or OrderStatus.Cancelled,
+            OrderStatus.Confirmed => newStatus is OrderStatus.Processing or OrderStatus.Cancelled,
+            OrderStatus.Processing => newStatus is OrderStatus.Shipped or OrderStatus.Cancelled,
+            OrderStatus.Shipped => newStatus == OrderStatus.Delivered,
+            OrderStatus.Delivered => false,
+            OrderStatus.Cancelled => false,
+            _ => false
+        };
+    }
 }

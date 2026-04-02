@@ -1,11 +1,11 @@
-using AuthServer.Models.ViewModels;
+using AuthServer.Models.Results;
 using AuthServer.Models.Responses;
 
 namespace AuthServer.Models.Mappers;
 
 public static class AuthenticatedUserMapper
 {
-    public static AuthenticatedUserResponse ToPresentation(this AuthenticatedUserViewModel viewModel)
+    public static AuthenticatedUserResponse ToPresentation(this AuthenticatedUserResult viewModel)
     {
         return new AuthenticatedUserResponse
         {

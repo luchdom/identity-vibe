@@ -2,11 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using AuthServer.Data;
 using AuthServer.Data.Entities;
+using AuthServer.Validators.AdminUsers;
+using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using AuthServer.Configuration;
 using AuthServer.Services;
 using AuthServer.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Validation.AspNetCore;
 using Shared.Logging.Extensions;
 using Shared.OpenTelemetry.Extensions;
@@ -27,6 +30,11 @@ builder.AddOpenTelemetryAutoInstrumentation("authserver", "1.0.0", dbTelemetry: 
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.SuppressModelStateInvalidFilter = true;
+});
+builder.Services.AddValidatorsFromAssemblyContaining<CreateUserRequestValidator>();
 
 // Configure Problem Details
 builder.Services.AddProblemDetails(options =>

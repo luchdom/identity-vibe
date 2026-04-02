@@ -1,10 +1,8 @@
-using Orders.Models.ViewModels;
-
 namespace Orders.Models.Results;
 
-public record OrderResult
+public sealed record OrderResult
 {
-    public required OrderViewModel Order { get; init; }
+    public required OrderDetailsResult Order { get; init; }
     public string? CorrelationId { get; init; }
     public DateTime ProcessedAt { get; init; } = DateTime.UtcNow;
 }

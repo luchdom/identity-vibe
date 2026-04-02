@@ -577,6 +577,42 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
     }
 
     [Fact]
+    public async Task AdminRolesApi_InvalidCreatePayload_ReturnsValidationProblemDetails()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.roles");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/roles")
+        {
+            Content = CreateJsonContent(new
+            {
+                name = " ",
+                description = new string('x', 501),
+                isActive = true
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, because: body);
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+
+        root.GetProperty("title").GetString().Should().Be("Validation Error");
+        root.GetProperty("status").GetInt32().Should().Be((int)HttpStatusCode.BadRequest);
+        root.GetProperty("instance").GetString().Should().Be("/api/admin/roles");
+        root.GetProperty("errors").EnumerateObject().Select(property => property.Name)
+            .Should().Contain(name => string.Equals(name, "Name", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task AdminRolesApi_AvailableScopes_ExcludesProtocolScopes()
     {
         await using var host = await CreateHostAsync();
@@ -746,6 +782,43 @@ public sealed class AuthenticationFlowTests(PostgresContainerFixture postgresFix
         refreshAfterDisableResponse.IsSuccessStatusCode.Should().BeFalse();
         refreshAfterDisableBody.Should().Contain("invalid_grant");
         refreshAfterDisableBody.Should().Contain("disabled");
+    }
+
+    [Fact]
+    public async Task AdminUsersApi_InvalidCreatePayload_ReturnsValidationProblemDetails()
+    {
+        await using var host = await CreateHostAsync();
+        var adminAuth = await RunAuthorizationCodeFlowAsync(
+            host.Client,
+            "admin@example.com",
+            "Admin123!",
+            requestedScope: "openid profile email offline_access admin.users");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/admin/users")
+        {
+            Content = CreateJsonContent(new
+            {
+                email = "",
+                password = "",
+                roleNames = new[] { "" },
+                isActive = true
+            })
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAuth.Token.AccessToken);
+
+        var response = await host.Client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, because: body);
+
+        using var document = JsonDocument.Parse(body);
+        var root = document.RootElement;
+
+        root.GetProperty("title").GetString().Should().Be("Validation Error");
+        root.GetProperty("status").GetInt32().Should().Be((int)HttpStatusCode.BadRequest);
+        root.GetProperty("instance").GetString().Should().Be("/api/admin/users");
+        root.GetProperty("errors").EnumerateObject().Select(property => property.Name)
+            .Should().Contain(name => string.Equals(name, "Email", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

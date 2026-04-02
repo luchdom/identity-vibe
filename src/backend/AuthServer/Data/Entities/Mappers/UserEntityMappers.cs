@@ -1,11 +1,11 @@
 using AuthServer.Data.Entities;
-using AuthServer.Models.ViewModels;
+using AuthServer.Models.Results;
 
 namespace AuthServer.Data.Entities.Mappers;
 
 public static class UserEntityMappers
 {
-    public static UserViewModel ToDomain(this AppUser entity) => new()
+    public static UserResult ToDomain(this AppUser entity) => new()
     {
         Id = entity.Id,
         Email = entity.Email ?? string.Empty,
@@ -14,7 +14,7 @@ public static class UserEntityMappers
         CreatedAt = entity.CreatedAt
     };
 
-    public static AppUser ToEntity(this UserViewModel viewModel) => new()
+    public static AppUser ToEntity(this UserResult viewModel) => new()
     {
         Id = viewModel.Id,
         Email = viewModel.Email,
@@ -25,7 +25,7 @@ public static class UserEntityMappers
         IsActive = viewModel.IsActive
     };
 
-    public static void UpdateEntity(this AppUser entity, UserViewModel viewModel)
+    public static void UpdateEntity(this AppUser entity, UserResult viewModel)
     {
         entity.Email = viewModel.Email;
         entity.NormalizedEmail = viewModel.Email.ToUpperInvariant();

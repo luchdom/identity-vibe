@@ -1,95 +1,46 @@
 # Architecture
 
-## Overview
+## Runtime Topology
 
-The system is composed of three runtime components in development:
+The active runtime in this repo is:
 
-- `web-app` (Next.js UI)
-- `AuthServer` (.NET 8, OpenIddict)
-- `Orders` (.NET 8 API)
+- `AuthServer` for identity, OpenID Connect, admin auth APIs, and account UI
+- `Orders` for orders APIs
+- `src/web-app` as the primary frontend
 
-The browser calls `AuthServer` and `Orders` directly. There is no separate reverse-proxy service.
+Legacy compatibility surfaces still exist:
+
+- Docker Compose still uses `client` as the frontend container/runtime name
+- `src/web-admin` remains in the repo during migration
+
+The browser calls `AuthServer` and `Orders` directly. There is no proxy/BFF layer.
 
 ## Request Flow
 
-1. User opens `web-app` (`http://localhost:3001` in standalone dev, `http://localhost:3000` in legacy Docker Compose flows)
-2. Frontend initiates OAuth2 Authorization Code + PKCE against `AuthServer`
-3. Frontend exchanges code for tokens on `AuthServer`
-4. Frontend loads user profile from `GET /connect/userinfo`
-5. Frontend calls `Orders` endpoints directly with bearer tokens
+1. User opens `src/web-app`
+2. Frontend starts OAuth2 Authorization Code + PKCE against `AuthServer`
+3. Frontend exchanges the code for tokens on `AuthServer`
+4. Frontend loads profile data from `GET /connect/userinfo`
+5. Frontend calls `Orders` with bearer tokens
 
 ## Security Model
 
-- `AuthServer` issues JWT access tokens.
-- `Orders` validates tokens using `AuthServer` as authority.
-- RBAC model:
-  - Roles are identity/grouping metadata on the user (`Admin`, `User`, `Support`).
-  - Scopes are API permissions (for example `orders.read`, `orders.write`, `orders.manage`).
-  - Runtime role -> scope assignments are stored in `AuthServer` DB (`AspNetRoleScopes`).
-  - `ScopeConfiguration:UserScopes:RoleScopes` is used for bootstrap defaults/seeding and not as the runtime source of truth.
-- User PKCE token issuance behavior (project-specific):
-  - Permission scopes are derived from the user's roles and included in the token (not limited by requested business scopes).
-  - Protocol scopes (`openid`, `profile`, `email`, `offline_access`, `roles`) remain request-driven.
-- Refresh-token behavior:
-  - `AuthServer` re-evaluates the user's current role-derived permission scopes.
-  - Role downgrades remove permissions on refresh.
-  - Role upgrades can add permissions on refresh.
-- `Orders` route authorization is scope-based via policies (`orders.read`, `orders.write`, `orders.manage`) and should not rely on role fallback.
-- Admin-like branching inside `Orders` should align to permission scopes (`orders.manage`) and may also accept `admin.full`.
-- AuthServer admin management APIs are split by scope:
-  - roles/permissions APIs: `admin.roles` or `admin.full`
-  - user-management APIs: `admin.users` or `admin.full`
-- User-management guardrails:
-  - self-disable is blocked
-  - self-removal of admin-management access (`admin.users`/`admin.full`) is blocked
-  - inactive roles cannot be assigned through admin user endpoints
+- `AuthServer` issues JWT access tokens
+- `Orders` validates tokens using `AuthServer` as authority
+- APIs authorize by scopes/policies, not role fallback
+- Runtime role-to-scope assignments live in `AuthServer` DB (`AspNetRoleScopes`)
+- `ScopeConfiguration:UserScopes:RoleScopes` is bootstrap/seeding config, not the runtime source of truth
 
-## RBAC Extension Workflow
+Project-specific token behavior:
 
-When adding a new permission:
+- PKCE user tokens include role-derived permission scopes
+- protocol scopes remain request-driven
+- refresh-token grants recompute current role-derived permission scopes
 
-1. Add a scope to `src/backend/AuthServer/appsettings.Scopes.json`
-2. (Optional bootstrap) map the scope in `ScopeConfiguration:UserScopes:RoleScopes` for default seeding/new environments
-3. Assign the scope to roles in the Roles & Permissions UI (`/users/roles`) or via `AuthServer` admin APIs
-4. Add the scope to the relevant client(s) in `src/backend/AuthServer/appsettings.Clients.json` if needed
-5. Add/update an API policy (for example in `src/backend/Orders/appsettings.json`)
-6. Add/update integration/unit tests for issuance and route enforcement
+## Repo-Specific Architecture Notes
 
-## Guardrails
+- `Shared` is the cross-service building-block layer
+- `Configuration/` remains a top-level backend folder by design
+- `AuthServer` keeps `Views/` and `wwwroot/` because it serves interactive auth UI
 
-- Do not authorize OAuth-protected API routes directly by role claims when the permission model is scope-based.
-- Do not assume the `scope` claim arrives in only one format (`scope` may be repeated claims or a space-separated value).
-- With self-contained JWTs, RBAC changes affect existing access tokens only after refresh/re-login/expiry.
-
-## Modeling Conventions
-
-- Domain/infrastructure runtime components (`controllers`, `services`, `repositories`, `middleware`, `DbContext`, EF entities) stay as `class`.
-- Boundary/data-carrying models (DTOs, commands, results, response/read models) should prefer immutable `sealed record` types.
-- Configuration models may use `record` + `init` + `required`, but must be backed by runtime options validation (`IValidateOptions<T>`) and startup fail-fast (`ValidateOnStart()`).
-
-## Refactor Cleanup Expectations
-
-- Major refactors should include a dead-code sweep (unused services/repos/helpers/DI registrations).
-- Solution structure should remain current (include active test projects; remove obsolete projects).
-
-## Service Ports (dev)
-
-- `AuthServer`: `http://localhost:5000`
-- `Orders`: `http://localhost:5003`
-- `web-app`: `http://localhost:3001` (standalone dev)
-- Legacy Docker `client`: `http://localhost:3000`
-
-## Key Files
-
-- `src/backend/AuthServer/Program.cs`
-- `src/backend/AuthServer/appsettings.Clients.json`
-- `src/backend/AuthServer/appsettings.Scopes.json`
-- `src/backend/AuthServer/Controllers/AdminRolesController.cs`
-- `src/backend/AuthServer/Controllers/AdminUsersController.cs`
-- `src/backend/AuthServer/Data/Entities/AppRoleScope.cs`
-- `src/backend/Orders/Program.cs`
-- `src/web-app/lib/api.ts`
-- `src/web-app/lib/admin-roles-api.ts`
-- `src/web-app/lib/admin-users-api.ts`
-- `src/web-app/lib/auth/oauth2-auth.ts`
-- `src/web-app/lib/orders-api.ts`
+Backend implementation details, layer responsibilities, and naming rules live in `docs/BACKEND.md`.

@@ -30,52 +30,48 @@ public static class ValidationExtensions
         return Regex.IsMatch(email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$");
     }
 
-    /// <summary>
-    /// Validates required string field
-    /// </summary>
     public static Result<string> RequireNonEmpty(this string? value, string fieldName)
     {
         return string.IsNullOrWhiteSpace(value)
-            ? Result<string>.Failure("REQUIRED_FIELD", $"{fieldName} is required")
+            ? CommonErrors.RequiredField(fieldName).ToResult<string>()
             : Result<string>.Success(value);
     }
 
-    /// <summary>
-    /// Validates string length
-    /// </summary>
     public static Result<string> ValidateLength(this string value, int minLength, int maxLength, string fieldName)
     {
         if (value.Length < minLength)
-            return Result<string>.Failure("VALIDATION_FAILED", $"{fieldName} must be at least {minLength} characters");
-        
+        {
+            return CommonErrors.ValidationFailed($"{fieldName} must be at least {minLength} characters").ToResult<string>();
+        }
+
         if (value.Length > maxLength)
-            return Result<string>.Failure("VALIDATION_FAILED", $"{fieldName} cannot exceed {maxLength} characters");
-        
+        {
+            return CommonErrors.ValidationFailed($"{fieldName} cannot exceed {maxLength} characters").ToResult<string>();
+        }
+
         return Result<string>.Success(value);
     }
 
-    /// <summary>
-    /// Validates decimal range
-    /// </summary>
     public static Result<decimal> ValidateRange(this decimal value, decimal min, decimal max, string fieldName)
     {
         if (value < min)
-            return Result<decimal>.Failure("VALIDATION_FAILED", $"{fieldName} must be at least {min}");
-        
+        {
+            return CommonErrors.ValidationFailed($"{fieldName} must be at least {min}").ToResult<decimal>();
+        }
+
         if (value > max)
-            return Result<decimal>.Failure("VALIDATION_FAILED", $"{fieldName} cannot exceed {max}");
-        
+        {
+            return CommonErrors.ValidationFailed($"{fieldName} cannot exceed {max}").ToResult<decimal>();
+        }
+
         return Result<decimal>.Success(value);
     }
 
-    /// <summary>
-    /// Validates collection has items
-    /// </summary>
     public static Result<T[]> RequireNonEmpty<T>(this IEnumerable<T> collection, string fieldName)
     {
         var array = collection.ToArray();
         return array.Length == 0
-            ? Result<T[]>.Failure("VALIDATION_FAILED", $"{fieldName} cannot be empty")
+            ? CommonErrors.ValidationFailed($"{fieldName} cannot be empty").ToResult<T[]>()
             : Result<T[]>.Success(array);
     }
 }

@@ -5,9 +5,9 @@
 - `postgres`
 - `authserver`
 - `orders`
-- `client`
+- `client` (legacy Docker frontend runtime name)
 
-## Compose Commands
+## Compose
 
 Development:
 
@@ -28,11 +28,12 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 - `EXTERNAL_ORDERS_URL`
 - `EXTERNAL_CLIENT_URL`
 
-## Important Notes
+## Deployment Notes
 
-- Browser traffic goes directly from the client app to `AuthServer` and `Orders`.
-- Ensure both APIs allow the client origin via CORS.
-- Ensure `web-admin` redirect URI (`/callback`) is registered for the `web-admin` OAuth client.
+- Browser traffic goes directly to `AuthServer` and `Orders`
+- Ensure CORS allows the active frontend origin
+- Ensure `/callback` is registered for the active frontend client
+- Keep legacy `web-admin` redirect URIs only while compatibility paths still need them
 
 ## Health Checks
 
@@ -40,4 +41,3 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 curl http://localhost:5000/health
 curl http://localhost:5003/health
 ```
-

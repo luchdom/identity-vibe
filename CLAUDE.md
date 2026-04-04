@@ -1,27 +1,25 @@
 # Project Notes
 
-## Services (development)
+Read `AGENTS.md` first for workflow rules and document routing.
+
+## Runtime
 
 - `AuthServer`: `http://localhost:5000`
 - `Orders`: `http://localhost:5003`
-- `web-admin`: `http://localhost:3000`
+- Primary frontend: `src/web-app`
+- Legacy frontend: `src/web-admin`
 
-## Architecture Rules
+## Key Rules
 
-- Frontend calls `AuthServer` and `Orders` directly (no proxy/BFF).
-- OAuth2/OIDC user auth uses Authorization Code + PKCE.
-- User profile retrieval uses `/connect/userinfo`.
-- Orders endpoints are protected by scope/role policies.
-
-## Local Run
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build postgres authserver orders client
-```
+- Frontend calls `AuthServer` and `Orders` directly
+- Auth uses Authorization Code + PKCE
+- User profile retrieval uses `/connect/userinfo`
+- Orders authorization is scope-based
+- Backend architecture rules live in `docs/BACKEND.md`
 
 ## Key Config Files
 
-- `src/web-admin/lib/api.ts`: frontend HTTP clients (`authApi`, `ordersApi`)
-- `src/backend/AuthServer/appsettings.Clients.json`: OAuth clients
-- `src/backend/AuthServer/appsettings.Scopes.json`: scopes + role scope mapping
-- `src/backend/Orders/appsettings*.json`: Orders API config/CORS
+- `src/web-app/lib/api.ts`
+- `src/backend/AuthServer/appsettings.Clients.json`
+- `src/backend/AuthServer/appsettings.Scopes.json`
+- `src/backend/Orders/appsettings*.json`

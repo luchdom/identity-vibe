@@ -1,121 +1,101 @@
 using Orders.Services.Interfaces;
-using System.Text;
 using System.Text.Json;
 
 namespace Orders.Middleware;
 
-public class IdempotencyMiddleware
+public class IdempotencyMiddleware(RequestDelegate next)
 {
-    private readonly RequestDelegate _next;
-
-    // Only apply idempotency to these HTTP methods and endpoints
-    private static readonly string[] IdempotentMethods = { "POST", "PUT" };
-    private static readonly string[] IdempotentPaths = { "/orders", "/orders/" };
-
-    public IdempotencyMiddleware(RequestDelegate next)
-    {
-        _next = next;
-    }
+    private static readonly string[] IdempotentMethods = ["POST", "PUT"];
+    private static readonly string[] IdempotentPaths = ["/orders", "/orders/"];
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Check if this request should be handled for idempotency
         if (!ShouldApplyIdempotency(context))
         {
-            await _next(context);
+            await next(context);
             return;
         }
 
         var idempotencyKey = GetIdempotencyKey(context);
-        if (string.IsNullOrEmpty(idempotencyKey))
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            // No idempotency key provided, proceed normally
-            await _next(context);
+            await next(context);
             return;
         }
 
         var userId = GetUserId(context);
-        if (string.IsNullOrEmpty(userId))
+        if (string.IsNullOrWhiteSpace(userId))
         {
-            // User not authenticated, proceed normally (auth will handle this)
-            await _next(context);
+            await next(context);
             return;
         }
 
         var idempotencyService = context.RequestServices.GetRequiredService<IIdempotencyService>();
         var correlationId = context.Request.Headers["X-Correlation-ID"].FirstOrDefault();
 
-        // Check if this idempotency key has been used before
         var checkResult = await idempotencyService.CheckIdempotencyAsync(
-            idempotencyKey, 
-            userId, 
-            context.Request.Method, 
+            idempotencyKey,
+            userId,
+            context.Request.Method,
             context.Request.Path,
             correlationId);
 
-        if (checkResult.IsFailure)
+        if (!checkResult.IsSuccess)
         {
-            context.Response.StatusCode = 400;
-            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = checkResult.Error.Message }));
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsync(JsonSerializer.Serialize(new { error = checkResult.ToError().Message }));
             return;
         }
 
-        var existingRecord = checkResult.Value;
-        if (existingRecord != null)
+        if (checkResult.Value != null)
         {
-            // Return the cached response
-            context.Response.StatusCode = existingRecord.ResponseStatusCode;
+            context.Response.StatusCode = checkResult.Value.ResponseStatusCode;
             context.Response.ContentType = "application/json";
-            
-            if (!string.IsNullOrEmpty(existingRecord.ResponseBody))
+
+            if (!string.IsNullOrWhiteSpace(checkResult.Value.ResponseBody))
             {
-                await context.Response.WriteAsync(existingRecord.ResponseBody);
+                await context.Response.WriteAsync(checkResult.Value.ResponseBody);
             }
+
             return;
         }
 
-        // Store the idempotency key in the context for the controller to use
         context.Items["IdempotencyKey"] = idempotencyKey;
         context.Items["IdempotencyUserId"] = userId;
         context.Items["IdempotencyCorrelationId"] = correlationId;
 
-        await _next(context);
+        await next(context);
     }
 
     private static bool ShouldApplyIdempotency(HttpContext context)
     {
         if (!IdempotentMethods.Contains(context.Request.Method, StringComparer.OrdinalIgnoreCase))
+        {
             return false;
+        }
 
         var path = context.Request.Path.Value?.ToLowerInvariant();
-        if (string.IsNullOrEmpty(path))
-            return false;
-
-        return IdempotentPaths.Any(idempotentPath => 
-            path.StartsWith(idempotentPath.ToLowerInvariant()));
+        return !string.IsNullOrWhiteSpace(path)
+            && IdempotentPaths.Any(idempotentPath => path.StartsWith(idempotentPath, StringComparison.Ordinal));
     }
 
     private static string? GetIdempotencyKey(HttpContext context)
     {
-        // Try header first
-        var headerKey = context.Request.Headers["Idempotency-Key"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(headerKey))
-            return headerKey;
-
-        // Try query parameter as fallback
-        return context.Request.Query["idempotencyKey"].FirstOrDefault();
+        return context.Request.Headers["Idempotency-Key"].FirstOrDefault()
+            ?? context.Request.Query["idempotencyKey"].FirstOrDefault();
     }
 
     private static string? GetUserId(HttpContext context)
     {
         var user = context.User;
         if (user?.Identity?.IsAuthenticated != true)
+        {
             return null;
+        }
 
-        // Try different claim types that might contain the user ID
-        return user.FindFirst("sub")?.Value ??
-               user.FindFirst("id")?.Value ??
-               user.FindFirst("user_id")?.Value ??
-               user.FindFirst("nameid")?.Value;
+        return user.FindFirst("sub")?.Value
+            ?? user.FindFirst("id")?.Value
+            ?? user.FindFirst("user_id")?.Value
+            ?? user.FindFirst("nameid")?.Value;
     }
 }

@@ -1,5 +1,6 @@
 using AuthServer.Models.AdminUsers;
 using AuthServer.Services.Interfaces;
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Shared.Common;
@@ -10,113 +11,158 @@ namespace AuthServer.Controllers;
 [ApiController]
 [Route("api/admin/users")]
 [Authorize(Policy = AdminUsersManagementPolicy)]
-public sealed class AdminUsersController(IUserAdminService userAdminService) : ControllerBase
+public sealed class AdminUsersController(
+    IUserAdminService userAdminService,
+    IValidator<CreateUserRequest> createUserRequestValidator,
+    IValidator<UpdateUserRequest> updateUserRequestValidator,
+    IValidator<UpdateUserRolesRequest> updateUserRolesRequestValidator,
+    IValidator<UpdateUserStatusRequest> updateUserStatusRequestValidator,
+    IValidator<ResetUserPasswordRequest> resetUserPasswordRequestValidator) : ControllerBase
 {
     public const string AdminUsersManagementPolicy = "AdminUsersManagement";
 
     [HttpGet]
-    public async Task<ActionResult<AdminUserListResponse>> ListUsers(
+    public async Task<IActionResult> ListUsers(
         [FromQuery] string? search,
         [FromQuery] bool? isActive,
         [FromQuery] string? role,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
+        (pageNumber, pageSize) = ValidationExtensions.ValidatePagination(pageNumber, pageSize);
         var result = await userAdminService.ListUsersAsync(search, isActive, role, pageNumber, pageSize);
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpGet("available-roles")]
-    public async Task<ActionResult<IReadOnlyList<AdminRoleOptionResponse>>> GetAvailableRoles()
+    public async Task<IActionResult> GetAvailableRoles()
     {
         var result = await userAdminService.GetAvailableRolesAsync();
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpGet("{userId}")]
-    public async Task<ActionResult<AdminUserDetailResponse>> GetUser(string userId)
+    public async Task<IActionResult> GetUser(string userId)
     {
+        var routeGuard = RequireRouteValue<AdminUserDetailResponse>(userId, "userId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
         var result = await userAdminService.GetUserAsync(userId);
-        return ToActionResult(result);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPost]
-    public async Task<ActionResult<AdminUserDetailResponse>> CreateUser([FromBody] CreateUserRequest request)
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request)
     {
-        var result = await userAdminService.CreateUserAsync(request);
-        if (result.IsSuccess)
+        var validationResult = await createUserRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
         {
-            return CreatedAtAction(nameof(GetUser), new { userId = result.Value.Id }, result.Value);
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        return ToProblem(result.Error);
+        var result = await userAdminService.CreateUserAsync(validationResult.Value);
+        return result.ToActionResultWithProblemDetails(
+            HttpContext,
+            value => CreatedAtAction(nameof(GetUser), new { userId = value.Id }, value));
     }
 
     [HttpPut("{userId}")]
-    public async Task<ActionResult<AdminUserDetailResponse>> UpdateUser(string userId, [FromBody] UpdateUserRequest request)
+    public async Task<IActionResult> UpdateUser(string userId, [FromBody] UpdateUserRequest request)
     {
-        var result = await userAdminService.UpdateUserAsync(userId, request);
-        return ToActionResult(result);
+        var routeGuard = RequireRouteValue<AdminUserDetailResponse>(userId, "userId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
+        var validationResult = await updateUserRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await userAdminService.UpdateUserAsync(userId, validationResult.Value);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPut("{userId}/roles")]
-    public async Task<ActionResult<AdminUserDetailResponse>> UpdateUserRoles(string userId, [FromBody] UpdateUserRolesRequest request)
+    public async Task<IActionResult> UpdateUserRoles(string userId, [FromBody] UpdateUserRolesRequest request)
     {
+        var routeGuard = RequireRouteValue<AdminUserDetailResponse>(userId, "userId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
         var actorUserId = User.GetUserId();
         if (string.IsNullOrWhiteSpace(actorUserId))
         {
-            return ToProblem(CommonErrors.Unauthorized);
+            return CommonErrors.Unauthorized.ToResult<AdminUserDetailResponse>()
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var result = await userAdminService.UpdateUserRolesAsync(userId, request, actorUserId);
-        return ToActionResult(result);
+        var validationResult = await updateUserRolesRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await userAdminService.UpdateUserRolesAsync(userId, validationResult.Value, actorUserId);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPut("{userId}/status")]
-    public async Task<ActionResult<AdminUserDetailResponse>> UpdateUserStatus(string userId, [FromBody] UpdateUserStatusRequest request)
+    public async Task<IActionResult> UpdateUserStatus(string userId, [FromBody] UpdateUserStatusRequest request)
     {
+        var routeGuard = RequireRouteValue<AdminUserDetailResponse>(userId, "userId");
+        if (routeGuard is not null)
+        {
+            return routeGuard;
+        }
+
         var actorUserId = User.GetUserId();
         if (string.IsNullOrWhiteSpace(actorUserId))
         {
-            return ToProblem(CommonErrors.Unauthorized);
+            return CommonErrors.Unauthorized.ToResult<AdminUserDetailResponse>()
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var result = await userAdminService.UpdateUserStatusAsync(userId, request, actorUserId);
-        return ToActionResult(result);
+        var validationResult = await updateUserStatusRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await userAdminService.UpdateUserStatusAsync(userId, validationResult.Value, actorUserId);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
     [HttpPut("{userId}/password")]
-    public async Task<ActionResult<AdminUserDetailResponse>> ResetUserPassword(string userId, [FromBody] ResetUserPasswordRequest request)
+    public async Task<IActionResult> ResetUserPassword(string userId, [FromBody] ResetUserPasswordRequest request)
     {
-        var result = await userAdminService.ResetUserPasswordAsync(userId, request);
-        return ToActionResult(result);
-    }
-
-    private ActionResult<T> ToActionResult<T>(Result<T> result)
-    {
-        if (result.IsSuccess)
+        var routeGuard = RequireRouteValue<AdminUserDetailResponse>(userId, "userId");
+        if (routeGuard is not null)
         {
-            return Ok(result.Value);
+            return routeGuard;
         }
 
-        return ToProblem(result.Error);
+        var validationResult = await resetUserPasswordRequestValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await userAdminService.ResetUserPasswordAsync(userId, validationResult.Value);
+        return result.ToActionResultWithProblemDetails(HttpContext, value => Ok(value));
     }
 
-    private ActionResult ToProblem(Error error)
+    private IActionResult? RequireRouteValue<TResponse>(string? value, string fieldName)
     {
-        var statusCode = error.Code switch
-        {
-            "NOT_FOUND" => StatusCodes.Status404NotFound,
-            "CONFLICT" => StatusCodes.Status409Conflict,
-            "FORBIDDEN" => StatusCodes.Status403Forbidden,
-            "AUTH_UNAUTHORIZED" => StatusCodes.Status401Unauthorized,
-            "VALIDATION_FAILED" or "REQUIRED_FIELD" => StatusCodes.Status400BadRequest,
-            _ => StatusCodes.Status500InternalServerError
-        };
-
-        return Problem(
-            statusCode: statusCode,
-            title: error.Code,
-            detail: error.Message);
+        return string.IsNullOrWhiteSpace(value)
+            ? CommonErrors.RequiredField(fieldName).ToResult<TResponse>().ToActionResultWithProblemDetails(HttpContext)
+            : null;
     }
 }

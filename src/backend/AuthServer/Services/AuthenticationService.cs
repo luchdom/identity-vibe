@@ -1,7 +1,6 @@
 using AuthServer.Data.Entities;
 using AuthServer.Models.Commands;
 using AuthServer.Models.Results;
-using AuthServer.Models.ViewModels;
 using AuthServer.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Shared.Common;
@@ -46,7 +45,7 @@ public class AuthenticationService(
             return new LoginResult
             {
                 Success = true,
-                User = UserViewModel.FromEntity(user)
+                User = UserResult.FromEntity(user)
             };
         }
 
@@ -102,7 +101,7 @@ public class AuthenticationService(
             return new RegisterResult
             {
                 Success = true,
-                User = UserViewModel.FromEntity(user)
+                User = UserResult.FromEntity(user)
             };
         }
 

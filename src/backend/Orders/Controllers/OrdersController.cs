@@ -1,13 +1,12 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Orders.Models.Requests;
-using Orders.Models.Mappers;
 using Orders.Models.Enums;
+using Orders.Models.Mappers;
+using Orders.Models.Requests;
 using Orders.Services.Interfaces;
-using System.Security.Claims;
-using System.Text.Json;
-using Shared.Common;
 using Shared.Extensions;
+using System.Text.Json;
 
 namespace Orders.Controllers;
 
@@ -16,294 +15,268 @@ namespace Orders.Controllers;
 [Authorize]
 public class OrdersController(
     IOrdersService ordersService,
-    IIdempotencyService idempotencyService) : ControllerBase
+    IIdempotencyService idempotencyService,
+    IValidator<CreateOrderRequest> createOrderValidator,
+    IValidator<UpdateOrderRequest> updateOrderValidator,
+    IValidator<CancelOrderRequest> cancelOrderValidator,
+    IValidator<UpdateOrderStatusRequest> updateOrderStatusValidator,
+    IValidator<AddTrackingNumberRequest> addTrackingNumberValidator) : ControllerBase
 {
-    /// <summary>
-    /// Creates a new order (idempotent)
-    /// </summary>
     [HttpPost]
     [Authorize(Policy = "orders.write")]
-    public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
+    public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest? request)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
+        }
+
+        var validationResult = await createOrderValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
 
         var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(requiredUserId, correlationId);
-        var result = await ordersService.CreateOrderAsync(command);
+        var userId = HttpContext.GetUserId()!;
+        var result = await ordersService.CreateOrderAsync(validationResult.Value.ToDomain(userId, correlationId));
 
-        if (result.IsFailure)
+        if (!result.IsSuccess)
         {
             return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        // Store idempotency record if key was provided
         var idempotencyKey = HttpContext.Items["IdempotencyKey"] as string;
-        if (!string.IsNullOrEmpty(idempotencyKey))
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                requiredUserId,
+                userId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
-                201,
-                responseBody,
+                StatusCodes.Status201Created,
+                JsonSerializer.Serialize(result.Value),
                 result.Value.Order.Id,
                 "Order",
                 correlationId);
         }
 
-        var response = result.ToPresentation();
-        return CreatedAtAction(nameof(GetOrderById), new { id = result.Value.Order.Id }, response);
+        return CreatedAtAction(nameof(GetOrderById), new { id = result.Value.Order.Id }, result.ToPresentation());
     }
 
-    /// <summary>
-    /// Gets orders for the current user with pagination
-    /// </summary>
     [HttpGet]
     [Authorize(Policy = "orders.read")]
-    public async Task<IActionResult> GetOrders(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] OrderStatus? status = null)
+    public async Task<IActionResult> GetOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] OrderStatus? status = null)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
-
-        // Validate pagination parameters
-        (page, pageSize) = ValidationExtensions.ValidatePagination(page, pageSize);
-
-        var query = OrderRequestMappers.ToDomain(requiredUserId, page, pageSize, status);
-        var result = await ordersService.GetOrdersAsync(query);
-
-        if (result.IsFailure)
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        (page, pageSize) = ValidationExtensions.ValidatePagination(page, pageSize);
+        var result = await ordersService.GetOrdersAsync(OrderRequestMappers.ToDomain(HttpContext.GetUserId()!, page, pageSize, status));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
     }
 
-    /// <summary>
-    /// Gets all orders (admin only) with pagination
-    /// </summary>
     [HttpGet("all")]
     [Authorize(Policy = "orders.manage")]
-    public async Task<IActionResult> GetAllOrders(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] OrderStatus? status = null)
+    public async Task<IActionResult> GetAllOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] OrderStatus? status = null)
     {
-        // Validate pagination parameters
         (page, pageSize) = ValidationExtensions.ValidatePagination(page, pageSize);
-
-        var query = OrderRequestMappers.ToDomain(page, pageSize, status);
-        var result = await ordersService.GetAllOrdersAsync(query);
-
-        if (result.IsFailure)
-        {
-            return result.ToActionResultWithProblemDetails(HttpContext);
-        }
-
-        var response = result.ToPresentation();
-        return Ok(response);
+        var result = await ordersService.GetAllOrdersAsync(OrderRequestMappers.ToDomain(page, pageSize, status));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
     }
 
-    /// <summary>
-    /// Gets a specific order by ID
-    /// </summary>
     [HttpGet("{id:int}")]
     [Authorize(Policy = "orders.read")]
     public async Task<IActionResult> GetOrderById(int id)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
-
-        var isAdmin = HttpContext.IsAdmin();
-        var query = OrderRequestMappers.ToDomain(id, requiredUserId, isAdmin);
-        var result = await ordersService.GetOrderByIdAsync(query);
-
-        if (result.IsFailure)
+        if (id <= 0)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await ordersService.GetOrderByIdAsync(OrderRequestMappers.ToDomain(id, HttpContext.GetUserId()!, HttpContext.IsAdmin()));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
     }
 
-    /// <summary>
-    /// Updates an existing order (idempotent)
-    /// </summary>
     [HttpPut("{id:int}")]
     [Authorize(Policy = "orders.write")]
-    public async Task<IActionResult> UpdateOrder(int id, [FromBody] UpdateOrderRequest request)
+    public async Task<IActionResult> UpdateOrder(int id, [FromBody] UpdateOrderRequest? request)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
+        if (id <= 0)
+        {
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
+        }
+
+        var validationResult = await updateOrderValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
 
         var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(id, requiredUserId, correlationId);
-        var result = await ordersService.UpdateOrderAsync(command);
+        var userId = HttpContext.GetUserId()!;
+        var result = await ordersService.UpdateOrderAsync(validationResult.Value.ToDomain(id, userId, correlationId));
 
-        if (result.IsFailure)
+        if (!result.IsSuccess)
         {
             return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        // Store idempotency record if key was provided
         var idempotencyKey = HttpContext.Items["IdempotencyKey"] as string;
-        if (!string.IsNullOrEmpty(idempotencyKey))
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                requiredUserId,
+                userId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
-                200,
-                responseBody,
+                StatusCodes.Status200OK,
+                JsonSerializer.Serialize(result.Value),
                 result.Value.Order.Id,
                 "Order",
                 correlationId);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        return Ok(result.ToPresentation());
     }
 
-    /// <summary>
-    /// Cancels an order (idempotent)
-    /// </summary>
     [HttpPost("{id:int}/cancel")]
     [Authorize(Policy = "orders.write")]
     public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderRequest? request = null)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
+        if (id <= 0)
+        {
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
             return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
+        }
 
         request ??= new CancelOrderRequest();
-        var correlationId = HttpContext.GetCorrelationId();
-        var command = request.ToDomain(id, requiredUserId, correlationId);
-        var result = await ordersService.CancelOrderAsync(command);
+        var validationResult = await cancelOrderValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
 
-        if (result.IsFailure)
+        var correlationId = HttpContext.GetCorrelationId();
+        var userId = HttpContext.GetUserId()!;
+        var result = await ordersService.CancelOrderAsync(validationResult.Value.ToDomain(id, userId, correlationId));
+
+        if (!result.IsSuccess)
         {
             return result.ToActionResultWithProblemDetails(HttpContext);
         }
 
-        // Store idempotency record if key was provided
         var idempotencyKey = HttpContext.Items["IdempotencyKey"] as string;
-        if (!string.IsNullOrEmpty(idempotencyKey))
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
         {
-            var responseBody = JsonSerializer.Serialize(result.Value);
             await idempotencyService.CreateIdempotencyRecordAsync(
                 idempotencyKey,
-                requiredUserId,
+                userId,
                 HttpContext.Request.Method,
                 HttpContext.Request.Path,
-                200,
-                responseBody,
+                StatusCodes.Status200OK,
+                JsonSerializer.Serialize(result.Value),
                 result.Value.Order.Id,
                 "Order",
                 correlationId);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        return Ok(result.ToPresentation());
     }
 
-    /// <summary>
-    /// Gets order status and history
-    /// </summary>
     [HttpGet("{id:int}/status")]
     [Authorize(Policy = "orders.read")]
     public async Task<IActionResult> GetOrderStatus(int id)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
-
-        var isAdmin = HttpContext.IsAdmin();
-        var query = OrderRequestMappers.ToStatusQuery(id, requiredUserId, isAdmin);
-        var result = await ordersService.GetOrderStatusAsync(query);
-
-        if (result.IsFailure)
+        if (id <= 0)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await ordersService.GetOrderStatusAsync(OrderRequestMappers.ToStatusQuery(id, HttpContext.GetUserId()!, HttpContext.IsAdmin()));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
     }
 
-    /// <summary>
-    /// Updates order status (admin only)
-    /// </summary>
     [HttpPost("{id:int}/status")]
     [Authorize(Policy = "orders.manage")]
-    public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
+    public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest? request)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
-
-        var command = request.ToDomain(id, requiredUserId);
-        var result = await ordersService.UpdateOrderStatusAsync(command);
-
-        if (result.IsFailure)
+        if (id <= 0)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var validationResult = await updateOrderStatusValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await ordersService.UpdateOrderStatusAsync(validationResult.Value.ToDomain(id, HttpContext.GetUserId()!));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
     }
 
-    /// <summary>
-    /// Adds tracking number to an order (admin only)
-    /// </summary>
     [HttpPost("{id:int}/tracking")]
     [Authorize(Policy = "orders.manage")]
-    public async Task<IActionResult> AddTrackingNumber(int id, [FromBody] AddTrackingNumberRequest request)
+    public async Task<IActionResult> AddTrackingNumber(int id, [FromBody] AddTrackingNumberRequest? request)
     {
-        var userId = HttpContext.GetUserId();
-        var userIdResult = ResultExtensions.RequireUserId<object>(userId);
-        if (userIdResult.IsFailure)
-            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
-        var requiredUserId = userId!;
-
-        var command = request.ToDomain(id, requiredUserId);
-        var result = await ordersService.AddTrackingNumberAsync(command);
-
-        if (result.IsFailure)
+        if (id <= 0)
         {
-            return result.ToActionResultWithProblemDetails(HttpContext);
+            return ResultExtensions.ValidationFailure<object>(("id", "id must be greater than zero."))
+                .ToActionResultWithProblemDetails(HttpContext);
         }
 
-        var response = result.ToPresentation();
-        return Ok(response);
-    }
+        var userIdResult = Shared.Common.ResultExtensions.RequireUserId<object>(HttpContext.GetUserId());
+        if (!userIdResult.IsSuccess)
+        {
+            return userIdResult.ToActionResultWithProblemDetails(HttpContext);
+        }
 
+        var validationResult = await addTrackingNumberValidator.ValidateRequestAsync(request, HttpContext.RequestAborted);
+        if (!validationResult.IsSuccess)
+        {
+            return validationResult.ToActionResultWithProblemDetails(HttpContext);
+        }
+
+        var result = await ordersService.AddTrackingNumberAsync(validationResult.Value.ToDomain(id, HttpContext.GetUserId()!));
+        return result.ToActionResultWithProblemDetails(HttpContext, value => value.ToPresentation());
+    }
 }

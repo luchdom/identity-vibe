@@ -51,7 +51,7 @@ public sealed class CustomAuthServerFactory(string connectionString) : WebApplic
         var sourceDir = new DirectoryInfo(Path.GetDirectoryName(callerFilePath)!);
         while (sourceDir is not null)
         {
-            var solutionPath = Path.Combine(sourceDir.FullName, "ArchZ.sln");
+            var solutionPath = Path.Combine(sourceDir.FullName, "IdentityVibe.sln");
             if (File.Exists(solutionPath))
             {
                 var authRoot = Path.Combine(sourceDir.FullName, "src", "backend", "AuthServer");
@@ -68,7 +68,7 @@ public sealed class CustomAuthServerFactory(string connectionString) : WebApplic
 
         while (directory is not null)
         {
-            var solutionPath = Path.Combine(directory.FullName, "ArchZ.sln");
+            var solutionPath = Path.Combine(directory.FullName, "IdentityVibe.sln");
             if (File.Exists(solutionPath))
             {
                 return Path.Combine(directory.FullName, "src", "backend", "AuthServer");
@@ -77,6 +77,6 @@ public sealed class CustomAuthServerFactory(string connectionString) : WebApplic
             directory = directory.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not locate repository root containing ArchZ.sln.");
+        throw new DirectoryNotFoundException("Could not locate repository root containing IdentityVibe.sln.");
     }
 }

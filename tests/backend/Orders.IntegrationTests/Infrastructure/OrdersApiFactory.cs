@@ -100,7 +100,7 @@ public sealed class OrdersApiFactory : WebApplicationFactory<Program>
         var sourceDir = new DirectoryInfo(Path.GetDirectoryName(callerFilePath)!);
         while (sourceDir is not null)
         {
-            var solutionPath = Path.Combine(sourceDir.FullName, "ArchZ.sln");
+            var solutionPath = Path.Combine(sourceDir.FullName, "IdentityVibe.sln");
             if (File.Exists(solutionPath))
             {
                 var ordersRoot = Path.Combine(sourceDir.FullName, "src", "backend", "Orders");
@@ -116,7 +116,7 @@ public sealed class OrdersApiFactory : WebApplicationFactory<Program>
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            var solutionPath = Path.Combine(directory.FullName, "ArchZ.sln");
+            var solutionPath = Path.Combine(directory.FullName, "IdentityVibe.sln");
             if (File.Exists(solutionPath))
             {
                 return Path.Combine(directory.FullName, "src", "backend", "Orders");
@@ -125,6 +125,6 @@ public sealed class OrdersApiFactory : WebApplicationFactory<Program>
             directory = directory.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not locate repository root containing ArchZ.sln.");
+        throw new DirectoryNotFoundException("Could not locate repository root containing IdentityVibe.sln.");
     }
 }

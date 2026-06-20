@@ -89,7 +89,7 @@ public sealed class BackendArchitectureTests
 
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "ArchZ.sln")))
+            if (File.Exists(Path.Combine(directory.FullName, "IdentityVibe.sln")))
             {
                 return directory.FullName;
             }
@@ -97,6 +97,6 @@ public sealed class BackendArchitectureTests
             directory = directory.Parent;
         }
 
-        throw new DirectoryNotFoundException("Could not locate repository root containing ArchZ.sln.");
+        throw new DirectoryNotFoundException("Could not locate repository root containing IdentityVibe.sln.");
     }
 }

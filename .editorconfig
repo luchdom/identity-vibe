@@ -184,8 +184,7 @@ csharp_using_directive_placement = outside_namespace:silent
 dotnet_style_prefer_required_members = true:suggestion
 
 # Collection expression preferences
-dotnet_style_prefer_collection_expression = when_types_loosely_match
-dotnet_diagnostic.IDE0301.severity = error
+dotnet_style_prefer_collection_expression = when_types_exactly_match:suggestion
 
 # Code quality rules
 dotnet_code_quality_unused_parameters = all:suggestion

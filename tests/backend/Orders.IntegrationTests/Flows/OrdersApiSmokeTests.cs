@@ -117,7 +117,7 @@ public sealed class OrdersApiSmokeTests : IAsyncLifetime
                     LastName = "Buyer",
                     Email = "not-an-email"
                 },
-                Items = Array.Empty<object>()
+                Items = (object[])[]
             });
 
         var body = await response.Content.ReadAsStringAsync();

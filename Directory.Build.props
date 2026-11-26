@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Keep the existing formatting warning in the editor. -->
+    <NoWarn Condition="'$(DesignTimeBuild)' != 'true'">$(NoWarn);IDE0055</NoWarn>
+  </PropertyGroup>
+</Project>

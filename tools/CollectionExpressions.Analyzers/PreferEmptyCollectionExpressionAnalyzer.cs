@@ -14,7 +14,7 @@ public sealed class PreferEmptyCollectionExpressionAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         "LUCH0001",
         "Use an empty collection expression",
-        "Use [] for the empty array. The typed form ({0})[] preserves the array type and overload selection",
+        "Use [] for the empty array, with ({0})[] to preserve its type and overload selection",
         "Style",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);

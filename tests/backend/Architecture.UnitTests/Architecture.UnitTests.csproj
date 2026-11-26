@@ -26,7 +26,7 @@
   </ItemGroup>
 
   <Target Name="CaptureBackendCompilerInputs" BeforeTargets="CoreCompile">
-    <MSBuild Projects="@(ProjectReference)" Targets="GetBackendCompilerInputs"
+    <MSBuild Projects="@(ProjectReference->WithoutMetadataValue('OutputItemType', 'Analyzer'))" Targets="GetBackendCompilerInputs"
              Properties="Configuration=$(Configuration);Platform=$(Platform);CustomAfterMicrosoftCommonTargets=$(MSBuildProjectDirectory)/BackendCompilerInputs.targets">
       <Output TaskParameter="TargetOutputs" ItemName="_BackendCompilerInput" />
     </MSBuild>

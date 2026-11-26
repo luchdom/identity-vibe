@@ -32,6 +32,13 @@ cd src/web-app
 pnpm test:e2e
 ```
 
+## Empty collection expressions
+
+Use `[]` for empty collections when the target type supports it. The .NET
+build and test commands fail with `LUCH0001` when `Array.Empty<T>()` can use
+a collection expression in that context. Use an explicit array type when
+a call site needs to preserve that type or the selected overload.
+
 ## Expectations
 
 - Prefer real integration coverage for auth changes

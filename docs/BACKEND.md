@@ -98,9 +98,10 @@ Allowed exceptions:
 
 ### Rules enforced by tests
 
-- A backend-owned DTO bound from an API request body must be a top-level record class
-  named `*Request`, declared in a file with the same name, such as `CreateOrderRequest.cs`.
+- An API action parameter bound from the request body must use a top-level backend
+  record class named `*Request`, declared in a matching file such as `CreateOrderRequest.cs`.
   This applies to explicit `[FromBody]` parameters and body binding inferred by MVC.
+  If the payload needs a collection or dictionary, declare it on the request record.
 - Handwritten C# files in `AuthServer`, `Orders`, and `Shared` may declare at most one
   top-level class or record class. Nested types and generated source are outside this rule.
 

@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using AuthServer.Controllers;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
@@ -9,7 +10,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.DependencyInjection;
 using Orders.Controllers;
 using Orders.Data.Repositories.Interfaces;
-using Shared.Extensions;
+using Orders.Models.Requests;
 using Xunit;
 
 namespace Architecture.UnitTests;
@@ -61,36 +62,26 @@ public sealed class BackendArchitectureTests
         using var provider = services.BuildServiceProvider();
         var actions = provider.GetRequiredService<IActionDescriptorCollectionProvider>()
             .ActionDescriptors.Items.OfType<ControllerActionDescriptor>();
-        Assembly[] backendAssemblies = [.. GetBackendAssemblies(), typeof(HttpContextExtensions).Assembly];
         var requests = actions
             .SelectMany(action => action.Parameters)
             .Where(parameter => parameter.BindingInfo?.BindingSource?.CanAcceptDataFrom(BindingSource.Body) == true)
-            .SelectMany(parameter => GetBodyModelTypes(parameter.ParameterType))
-            .Where(type => backendAssemblies.Contains(type.Assembly) && !type.IsEnum)
+            .Select(parameter => parameter.ParameterType)
             .Distinct()
             .ToArray();
         requests.Should().NotBeEmpty("MVC must discover the application's body-bound models");
 
-        var declarations = ReadBackendSources()
-            .SelectMany(file => file.Types.Select(type => (File: file, Type: type)))
-            .ToLookup(item => (item.File.AssemblyName, BackendSourceFile.GetMetadataName(item.Type)));
-        var violations = requests.SelectMany(request =>
-        {
-            var matches = declarations[(request.Assembly.GetName().Name!, request.FullName!)].ToArray();
-            if (matches.Length == 0)
-            {
-                return [$"{request.FullName}: no handwritten source declaration found"];
-            }
+        GetRequestViolations(requests).Should()
+            .BeEmpty("body-bound API parameters must use top-level record classes named *Request in matching files");
+    }
 
-            return matches
-                .Where(match => !BackendSourceFile.IsTopLevel(match.Type)
-                                || !BackendSourceFile.IsRecordClass(match.Type)
-                                || !match.Type.Identifier.ValueText.EndsWith("Request", StringComparison.Ordinal)
-                                || Path.GetFileNameWithoutExtension(match.File.RelativePath) != match.Type.Identifier.ValueText)
-                .Select(match => $"{match.File.RelativePath}: {request.FullName}");
-        });
-
-        violations.Should().BeEmpty("body-bound API DTOs must be top-level record classes named *Request in matching files");
+    [Theory]
+    [InlineData(typeof(JsonElement))]
+    [InlineData(typeof(Dictionary<string, string>))]
+    [InlineData(typeof(CreateOrderRequest[]))]
+    public void Body_request_rule_rejects_raw_payloads_and_arrays(Type parameterType)
+    {
+        GetRequestViolations([parameterType]).Should().ContainSingle()
+            .Which.Should().Contain(parameterType.ToString());
     }
 
     [Fact]
@@ -146,16 +137,29 @@ public sealed class BackendArchitectureTests
     private static Assembly[] GetBackendAssemblies() =>
         [typeof(AdminUsersController).Assembly, typeof(OrdersController).Assembly];
 
-    private static IEnumerable<Type> GetBodyModelTypes(Type type)
+    private static IEnumerable<string> GetRequestViolations(IEnumerable<Type> requests)
     {
-        if (type.IsArray)
-        {
-            return GetBodyModelTypes(type.GetElementType()!);
-        }
+        var declarations = ReadBackendSources()
+            .SelectMany(file => file.Types.Select(type => (File: file, Type: type)))
+            .ToLookup(item => (item.File.AssemblyName, BackendSourceFile.GetMetadataName(item.Type)));
 
-        return type.IsGenericType
-            ? type.GetGenericArguments().SelectMany(GetBodyModelTypes).Prepend(type.GetGenericTypeDefinition())
-            : [type];
+        return requests.SelectMany(request =>
+        {
+            var declarationType = request.IsConstructedGenericType ? request.GetGenericTypeDefinition() : request;
+            var matches = declarations[(declarationType.Assembly.GetName().Name!, declarationType.FullName!)].ToArray();
+            if (matches.Length == 0)
+            {
+                return [$"{request}: no handwritten source declaration found"];
+            }
+
+            return matches
+                .Where(match => !BackendSourceFile.IsTopLevel(match.Type)
+                                || !BackendSourceFile.IsRecordClass(match.Type)
+                                || !match.Type.Identifier.ValueText.EndsWith("Request", StringComparison.Ordinal)
+                                || !string.Equals(Path.GetFileName(match.File.RelativePath),
+                                    match.Type.Identifier.ValueText + ".cs", StringComparison.Ordinal))
+                .Select(match => $"{match.File.RelativePath}: {request}");
+        });
     }
 
     private static BackendSourceFile[] ReadBackendSources()

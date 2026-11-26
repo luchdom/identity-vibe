@@ -40,10 +40,13 @@ pnpm test:e2e
 - Cover FluentValidation-to-ProblemDetails behavior with both helper-level and endpoint-level tests
 - Use `Architecture.UnitTests` for stable rules from the [Backend Guide](BACKEND.md).
   The suite runs as part of `dotnet test IdentityVibe.sln` and needs no database.
-  It uses MVC action descriptors for body binding and parses the files selected by
-  each backend project's build with its configured C# language version and compiler symbols.
-- When an architecture rule changes, update the Backend Guide and its test together
-  so reviewers can check the change against the documented decision.
+  It uses standard MVC registrations to discover action descriptors for body binding.
+  An explicit `[FromServices]` attribute identifies action parameters resolved from
+  application-specific services to this suite. The source checks use each backend
+  project's compiler inputs, including its C# language version and symbols.
+- Changing an established architecture rule, reducing its test coverage, or bypassing
+  its check requires a recorded, owner-approved architecture decision and independent
+  Staff Engineer review. Update the Backend Guide and its test together.
 
 ## Common Pitfalls
 

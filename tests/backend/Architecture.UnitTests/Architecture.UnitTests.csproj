@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
@@ -21,6 +22,19 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\backend\AuthServer\AuthServer.csproj" />
     <ProjectReference Include="..\..\..\src\backend\Orders\Orders.csproj" />
+    <ProjectReference Include="..\..\..\src\backend\Shared\Shared.csproj" />
   </ItemGroup>
+
+  <Target Name="CaptureBackendCompilerInputs" BeforeTargets="CoreCompile">
+    <MSBuild Projects="@(ProjectReference)" Targets="GetBackendCompilerInputs"
+             Properties="Configuration=$(Configuration);Platform=$(Platform);CustomAfterMicrosoftCommonTargets=$(MSBuildProjectDirectory)/BackendCompilerInputs.targets">
+      <Output TaskParameter="TargetOutputs" ItemName="_BackendCompilerInput" />
+    </MSBuild>
+    <WriteLinesToFile File="$(OutDir)BackendCompilerInputs.txt" Lines="@(_BackendCompilerInput)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <FileWrites Include="$(OutDir)BackendCompilerInputs.txt" />
+    </ItemGroup>
+  </Target>
 
 </Project>

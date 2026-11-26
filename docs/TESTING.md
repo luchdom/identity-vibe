@@ -9,9 +9,11 @@
 - `tests/backend/Shared.UnitTests`
   - shared helpers and cross-service utilities
 - `tests/backend/Orders.UnitTests`
-  - seed tests
-  - lightweight architecture checks
-  - minimal `Orders` endpoint smoke coverage
+  - seed and validator tests
+- `tests/backend/Orders.IntegrationTests`
+  - `Orders` endpoint smoke tests
+- `tests/backend/Architecture.UnitTests`
+  - executable backend architecture rules
 
 ## Commands
 
@@ -19,6 +21,8 @@
 dotnet test tests/backend/AuthServer.IntegrationTests/AuthServer.IntegrationTests.csproj
 dotnet test tests/backend/Shared.UnitTests/Shared.UnitTests.csproj
 dotnet test tests/backend/Orders.UnitTests/Orders.UnitTests.csproj
+dotnet test tests/backend/Orders.IntegrationTests/Orders.IntegrationTests.csproj
+dotnet test tests/backend/Architecture.UnitTests/Architecture.UnitTests.csproj
 ```
 
 Frontend Playwright checks:
@@ -34,9 +38,12 @@ pnpm test:e2e
 - Use unit tests for shared helper behavior
 - Keep at least minimal automated endpoint-level verification for `Orders`
 - Cover FluentValidation-to-ProblemDetails behavior with both helper-level and endpoint-level tests
-- Cover architecture guardrails where practical:
-  - no active backend `ViewModel` contracts
-  - controllers do not depend on repositories directly
+- Use `Architecture.UnitTests` for stable rules from the [Backend Guide](BACKEND.md).
+  The suite runs as part of `dotnet test IdentityVibe.sln` and needs no database.
+  It uses MVC action descriptors for body binding and parses the files selected by
+  each backend project's build with its configured C# language version and compiler symbols.
+- When an architecture rule changes, update the Backend Guide and its test together
+  so reviewers can check the change against the documented decision.
 
 ## Common Pitfalls
 

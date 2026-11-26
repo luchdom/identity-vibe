@@ -96,6 +96,17 @@ Allowed exceptions:
 - framework-bound MVC form models that need mutable setters
 - models where positional syntax materially hurts readability or tooling compatibility
 
+### Rules enforced by tests
+
+- A backend-owned DTO bound from an API request body must be a top-level record class
+  named `*Request`, declared in a file with the same name, such as `CreateOrderRequest.cs`.
+  This applies to explicit `[FromBody]` parameters and body binding inferred by MVC.
+- Handwritten C# files in `AuthServer`, `Orders`, and `Shared` may declare at most one
+  top-level class or record class. Nested types and generated source are outside this rule.
+
+MVC/Razor account form models can keep mutable setters. See [Testing](TESTING.md)
+for the architecture suite and how to run it.
+
 ## Result Strategy
 
 - Use `Ardalis.Result` at the service layer.

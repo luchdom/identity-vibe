@@ -1,0 +1,9 @@
+<Project>
+  <Target Name="GetBackendCompilerInputs" DependsOnTargets="AddImplicitDefineConstants"
+          Returns="@(_BackendCompilerInput)">
+    <ItemGroup>
+      <_BackendCompilerInput Include="Project|$(AssemblyName)|$(LangVersion)|$([MSBuild]::Escape('$(DefineConstants)'))" />
+      <_BackendCompilerInput Include="@(Compile->'Source|%(FullPath)')" />
+    </ItemGroup>
+  </Target>
+</Project>
